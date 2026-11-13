@@ -49,9 +49,9 @@ let
       };
     };
 
-  # tool_jar_sha256 of the official release BML-0.36.0-dev.9 (Windows, Oracle JDK 25.0.4.1). The
-  # tools' source (loader/src/loader/tools/src) is unchanged since, so this build must give the same
-  # jars; drop an entry when its tool's source changes.
+  # tool_jar_sha256 of the official releases BML-0.36.0-dev.9 and dev.14 (Windows, Oracle JDK
+  # 25.0.4.1; the same in both). This build must give the same jars; when upstream changes a tool's
+  # source (loader/src/loader/tools/src), take its hash from the new release's RELEASE-MANIFEST.json.
   releaseToolJars = {
     "bitwig-access-widener.jar" = "1a396dd3a6ed7fac4d23b60044155efbec813769b588d418254285bcadaa27c6";
     "bitwig-add-method-patcher.jar" =
@@ -64,8 +64,10 @@ let
     "bitwig-typed-local-patcher.jar" =
       "7ee6921d6d3a18aecdc836d6ea2ec5a052b116c6accedb81b32586b1f16d861a";
   };
-  # The same release's modkit/bml-modkit.jar (modkit/src/tool unchanged since).
+  # The same releases' modkit/bml-modkit.jar (modkit/src/tool).
   releaseModkitJar = "67377ec1ca657b07fa2d9ebdef447a00b5d7c4f58fb7358e5b44ca50e7520258";
+  # api_jar_sha256 of BML-0.36.0-dev.14 (loader/src/loader/api/src); modkit builds the same jar.
+  releaseApiJar = "276d9c6d0d7e7a88a147eb998beb65576bee16a5b2098becd1f16b4e8db88ebc";
 
   # What the build and its checks read; generated files and the git-ignored fonts are left out.
   wanted = [
@@ -196,6 +198,8 @@ stdenv.mkDerivation {
       '') releaseToolJars
     )}
     echo "${releaseModkitJar}  modkit/out/bml-modkit.jar" | sha256sum -c -
+    echo "${releaseApiJar}  build/bml/loader/api/bml-api.jar" | sha256sum -c -
+    echo "${releaseApiJar}  modkit/out/bml-api.jar" | sha256sum -c -
     # notifications-framework's offline tests (no Bitwig jar needed)
     javac -nowarn -encoding UTF-8 -d "$TMPDIR/notifications-test" \
       -sourcepath frameworks/notifications-framework/src:loader/src/loader/api/src \

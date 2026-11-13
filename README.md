@@ -56,7 +56,7 @@ Building needs JDK 25.0.4.1 (`javac --release 21`), Python 3 and, for the native
 
 ## Nix
 
-The flake builds Patchbay on and for the computer it runs on: Linux (x64, arm64) and macOS (Apple silicon, Intel). That is a host build, not a release, and it says so in its files. Any JDK 25 is enough: the build checks that its eight tool jars and `bml-modkit.jar` are byte-identical to those of the release BML-0.36.0-dev.9 (the window's and the API's source is newer than that release, so their jars aren't compared). The native agent is built with nixpkgs' compiler, not the release's pinned one. On a Mac the agent is universal (arm64 + x86_64), as in the release; the macOS package was built and checked on an aarch64-darwin builder (universal dylib, tool jars matching the release's with Zulu 25.0.3).
+The flake builds Patchbay on and for the computer it runs on: Linux (x64, arm64) and macOS (Apple silicon, Intel). That is a host build, not a release, and it says so in its files. Any JDK 25 is enough: the build checks that its eight tool jars, `bml-api.jar` and `bml-modkit.jar` are byte-identical to those of the release BML-0.36.0-dev.14. The window's jar differs from the release's only in the two classes the Nix defaults change (`BmlConfig`, `JavaPreparer`); its other classes and the bundled fonts are the release's, byte for byte. The native agent is built with nixpkgs' compiler, not the release's pinned one. On a Mac the agent is universal (arm64 + x86_64), as in the release; the macOS package was built and checked on an aarch64-darwin builder (universal dylib, tool jars matching the release's with Zulu 25.0.3).
 
 ```sh
 nix run github:dweee/Patchbay     # opens the Patchbay window
