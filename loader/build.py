@@ -11,7 +11,9 @@
 
 The version comes from LOADER_VERSION in JavaPreparer.java. The control app (the Patchbay window
 and the preparer) is compiled with JDK 25 (--release 21), the same toolchain as every accepted
-loader, and jar entries get a fixed timestamp so the same source always produces the same jar. A
+loader, and jar entries get a fixed timestamp and a manifest written here (JAR_CREATED_BY) so the
+same source always produces the same jar. The pinned JDK is 25.0.4.1; any javac 25.0.x is taken,
+since its classes were checked to be the same bytes (BML_JDK_HOME names another JDK). A
 file that needs a later Java is listed in APP_RELEASE_OVERRIDES and compiled on its own at that
 release (DarkTitleBar.java: the Foreign Function API, final in 22); the rest of the app never names
 it, so the jar still runs on Java 21. Files under src/loader/app/resources are copied into the jar
@@ -48,17 +50,31 @@ by git) or --mac-dylib, and only when the recorded inputs are still the source's
 SHA-256 is the recorded one; it places it beside the DLL. Without it, it refuses to build a
 release; --no-mac builds one without macOS support under another name (and without BML.command,
 the launcher a Mac user double-clicks in Finder).
+
+  python loader/build.py --host --stage DIR   a build for this computer only, not a release:
+                                    the unpacked tree in DIR, named BML-<version>-core-host-<linux|macos>
+
+--host builds what a release holds, but with the JDK in BML_JDK_HOME (else JAVA_HOME) and only this
+computer's agent, compiled with $CXX (default g++ on Linux, clang++ on macOS) and the flags above:
+on Linux for this computer's architecture, on macOS universal (arm64 + x86_64; clang needs lipo on
+PATH for that). The pinned compilers, MSVC, WSL and the Mac record are not checked or used;
+RELEASE-MANIFEST.json says "host_build": true and names the javac and compiler used. It is how the
+Nix package (nix/package.nix) is built.
 """
 from __future__ import annotations
-import argparse, hashlib, json, re, shutil, subprocess, sys, tempfile, zipfile
+import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile, zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE / "src"
-JDK = Path(r"C:\Program Files\Java\jdk-25.0.4.1\bin")
+# the pinned JDK, or the one BML_JDK_HOME names (--host: else JAVA_HOME); see check_javac
+JDK = Path(os.environ["BML_JDK_HOME"]) / "bin" if os.environ.get("BML_JDK_HOME") else Path(r"C:\Program Files\Java\jdk-25.0.4.1\bin")
 VCVARS = Path(r"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat")
 JDK_HOME = JDK.parent
 FIXED_DATE = "2026-01-01T00:00:00Z"
+# The Created-By line every jar's manifest carries: the pinned JDK's jar tool writes it, and writing it
+# ourselves keeps the jars the same bytes with any JDK 25 (javac 25.0.x gives the same classes).
+JAR_CREATED_BY = "25.0.4.1 (Oracle Corporation)"
 FIXED_EPOCH = 1767225600  # the same instant, for PE headers
 WSL_DISTRO = "Ubuntu-24.04"
 GXX_VERSION = "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"  # standard 11: pinned toolchain
@@ -109,6 +125,22 @@ def build_app(tmp: Path, classes: Path) -> list[str]:
     return [f for f in FONTS if not (font_dir / f).is_file()]
 
 
+def jar_manifest(path: Path, *attributes: str) -> Path:
+    """A jar manifest with these attributes after Manifest-Version, in this order (CRLF, as jar writes it)."""
+    path.write_bytes("".join(f"{a}\r\n" for a in ("Manifest-Version: 1.0",) + attributes + ("",)).encode("ascii"))
+    return path
+
+
+def check_javac() -> str:
+    """javac -version, refused unless it is JDK 25. Any 25.0.x: the classes it gives were checked to be
+    the same bytes as the pinned 25.0.4.1's (standard 11), and the jar manifest is written by us."""
+    r = subprocess.run([str(JDK / "javac"), "-version"], capture_output=True, text=True)
+    javac = (r.stdout or r.stderr).strip()
+    if r.returncode or not javac.startswith("javac 25."):
+        raise SystemExit(f"expected javac 25 (pinned 25.0.4.1) in {JDK}, found {javac!r}")
+    return javac
+
+
 def check_modules(jar: Path) -> str:
     """The modules the jar needs (jdeps); refuses any Bitwig's runtime doesn't have."""
     r = subprocess.run([str(JDK / "jdeps"), "--print-module-deps", "--ignore-missing-deps", "--multi-release", "25", str(jar)],
@@ -152,7 +184,8 @@ def build_tools(tmp: Path, tools_dir: Path) -> dict[str, str]:
         subprocess.run([str(JDK / "javac"), "--release", "21", "-nowarn", "-encoding", "UTF-8", "-d", str(classes)]
                        + [str(src / s) for s in sources], check=True)
         out = tools_dir / jar
-        subprocess.run([str(JDK / "jar"), "--create", "--file", str(out), f"--date={FIXED_DATE}", "--main-class", main,
+        mf = jar_manifest(tmp / (jar + ".mf"), f"Created-By: {JAR_CREATED_BY}", f"Main-Class: {main}")
+        subprocess.run([str(JDK / "jar"), "--create", "--file", str(out), f"--date={FIXED_DATE}", "--manifest", str(mf),
                         "-C", str(classes), "."], check=True)
         hashes[jar] = sha(out)
     return hashes
@@ -165,7 +198,9 @@ def build_api(tmp: Path, out: Path) -> str:
     sources = sorted(str(p) for p in (SRC / "loader/api/src").rglob("*.java"))
     subprocess.run([str(JDK / "javac"), "--release", "17", "-nowarn", "-encoding", "UTF-8", "-d", str(classes)] + sources, check=True)
     out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run([str(JDK / "jar"), "--create", "--file", str(out), f"--date={FIXED_DATE}", "-C", str(classes), "."], check=True)
+    mf = jar_manifest(tmp / "api.mf", f"Created-By: {JAR_CREATED_BY}")
+    subprocess.run([str(JDK / "jar"), "--create", "--file", str(out), f"--date={FIXED_DATE}", "--manifest", str(mf),
+                    "-C", str(classes), "."], check=True)
     return sha(out)
 
 
@@ -344,13 +379,130 @@ def make_mac_kit(out_dir: Path) -> int:
     return 0
 
 
+def host_agent(tmp: Path, bin_dir: Path, mac: bool) -> tuple[Path, str]:
+    """The tracer for this computer only, compiled with $CXX: build_so's flags on Linux (the host
+    architecture), build-agent-mac.sh's on macOS (universal). Returns it and the compiler's version."""
+    cxx = os.environ.get("CXX") or ("clang++" if mac else "g++")
+    r = subprocess.run([cxx, "--version"], capture_output=True, text=True)
+    if r.returncode or not r.stdout:
+        raise SystemExit(f"no C++ compiler: {cxx} --version failed\n{r.stdout}{r.stderr}")
+    version_line = r.stdout.splitlines()[0].strip()
+    work = tmp / "native-host"; work.mkdir()
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    src, inc = SRC / "loader/jvmti/src/bitwig_jvmti_tracer.cpp", JDK_HOME / "include"
+    env = dict(os.environ)
+    if mac:
+        out = bin_dir / "bitwig-jvmti-tracer.dylib"
+        exports = work / "exports.txt"
+        exports.write_bytes(b"_Agent_OnLoad\n_Agent_OnAttach\n_Agent_OnUnload\n")
+        cmd = [cxx, "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=12.0", "-std=c++17", "-O2", "-shared", "-fPIC", "-fvisibility=hidden",
+               f"-ffile-prefix-map={SRC}/loader/jvmti/src/=", f"-ffile-prefix-map={inc}/=jdk/include/",
+               f"-ffile-prefix-map={SRC}/loader/jvmti/include/=jdk/include/",
+               f"-I{inc}", f"-I{SRC}/loader/jvmti/include/darwin",
+               f"-Wl,-exported_symbols_list,{exports}", "-Wl,-x", "-Wl,-S",
+               "-Wl,-install_name,@rpath/bitwig-jvmti-tracer.dylib", "-o", str(out), str(src)]
+        env["ZERO_AR_DATE"] = "1"
+    else:
+        out = bin_dir / "bitwig-jvmti-tracer.so"
+        exports = work / "exports.map"
+        exports.write_bytes(b"{\n  global: Agent_OnLoad; Agent_OnAttach; Agent_OnUnload;\n  local: *;\n};\n")
+        cmd = [cxx, "-std=c++17", "-O2", "-fPIC", "-shared", "-fvisibility=hidden",
+               "-static-libstdc++", "-static-libgcc", "-Wl,--exclude-libs,ALL", f"-Wl,--version-script={exports}",
+               "-Wl,--build-id=sha1", "-s", "-frandom-seed=bitwig_jvmti_tracer",
+               f"-ffile-prefix-map={SRC}/=", f"-ffile-prefix-map={inc}/=jdk/include/",
+               f"-I{inc}", f"-I{SRC}/loader/jvmti/include/linux", "-o", str(out), str(src)]
+    r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", env=env, cwd="/")
+    if r.returncode or not out.is_file():
+        raise SystemExit("JVMTI tracer (host) build failed:\n" + " ".join(cmd) + "\n" + r.stdout + r.stderr)
+    # Ad-hoc signature, as build-agent-mac.sh gives it, when codesign is there; else the linker's own
+    # ad-hoc signature (every arm64 link gets one) stays.
+    if mac and shutil.which("codesign"):
+        subprocess.run(["codesign", "-s", "-", "-f", "-i", "dev.bml.bitwig-jvmti-tracer", str(out)], check=True)
+    return out, version_line
+
+
+def host_build(a: argparse.Namespace) -> int:
+    """--host: see the module docstring. Writes the unpacked tree to a.stage."""
+    global JDK, JDK_HOME
+    home = os.environ.get("BML_JDK_HOME") or os.environ.get("JAVA_HOME")
+    if not home:
+        raise SystemExit("--host needs BML_JDK_HOME or JAVA_HOME: a JDK 25")
+    JDK_HOME = Path(home); JDK = JDK_HOME / "bin"
+    if sys.platform.startswith("linux"):
+        host, mac = "linux", False
+    elif sys.platform == "darwin":
+        host, mac = "macos", True
+    else:
+        raise SystemExit(f"--host builds for Linux or macOS, not {sys.platform}")
+    dest = a.stage.resolve()
+    if dest.exists() and any(dest.iterdir()):
+        if not a.replace:
+            raise SystemExit(f"{dest} is not empty; pass --replace to rebuild it")
+        shutil.rmtree(dest)
+    javac = check_javac()
+    ver = version()
+    name = f"BML-{ver}-core-host-{host}"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        classes = tmp / "classes"; classes.mkdir()
+        missing_fonts = build_app(tmp, classes)
+        if missing_fonts:
+            print("WARNING: bundled fonts not in src/loader/app/resources/dev/bitwigre/bml/fonts: " + ", ".join(missing_fonts)
+                  + "; the window uses the platform's fonts")
+        jar_manifest(tmp / "manifest.mf", "Main-Class: dev.bitwigre.bml.BmlControlApp", f"Created-By: {JAR_CREATED_BY}")
+        stage = tmp / name
+        shutil.copytree(SRC, stage, ignore=shutil.ignore_patterns("*.jar", "*.class", "*.so", "*.dylib", "*.dll", "jdk-include",
+                                                                  "build-invoke", "build-helper-remap", "__pycache__",
+                                                                  *([] if mac else [MAC_COMMAND])))
+        tool_hashes = build_tools(tmp, stage / "loader/tools")
+        jar = stage / "loader/app/bml-control.jar"
+        subprocess.run([str(JDK / "jar"), "--create", "--file", str(jar), f"--date={FIXED_DATE}",
+                        "--manifest", str(tmp / "manifest.mf"), "-C", str(classes), "."], check=True)
+        modules = check_modules(jar)
+        agent, cxx = host_agent(tmp, stage / "loader/jvmti/bin", mac)
+        api_sha = build_api(tmp, stage / "loader/api/bml-api.jar")
+        (stage / "RELEASE-MANIFEST.json").write_text(json.dumps({
+            "name": name, "loader_version": ver, "host_build": True,
+            "control_jar_sha256": sha(jar), "jvmti_dll_sha256": None,
+            "jvmti_so_sha256": None if mac else sha(agent), "jvmti_dylib_sha256": sha(agent) if mac else None,
+            "tool_jar_sha256": tool_hashes, "api_jar_sha256": api_sha,
+            "control_jar_modules": modules,
+            "control_jar_fonts": "bundled" if not missing_fonts else "platform (bundled fonts missing)",
+            "built_with": f"{javac} --release 21 (DarkTitleBar.java --release 22); {cxx} -O2"
+                          + (" arm64 + x86_64, target macOS 12.0" if mac else " -static-libstdc++")
+                          + f"; host build for {host} only, not a release",
+            "source": "loader/src",
+        }, indent=2) + "\n", "utf8")
+        # the modes a release ZIP gives when unzipped: 0755 for the sh scripts, 0644 for the rest
+        for f in sorted(stage.rglob("*")):
+            if f.is_dir():
+                f.chmod(0o755)
+            elif f.suffix in EXECUTABLE:
+                if b"\r" in f.read_bytes():
+                    raise SystemExit(f"{f.relative_to(stage).as_posix()} has CRLF line endings, which break sh and bash")
+                f.chmod(0o755)
+            else:
+                f.chmod(0o644)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(stage, dest, dirs_exist_ok=True)
+        print(f"BUILT {dest}  {name}  control_jar_sha256={sha(jar)}  (host build, not a release)")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--replace", action="store_true")
     ap.add_argument("--mac-dylib", type=Path, default=MAC_INPUT, help="the Mac-built agent (default: %(default)s)")
     ap.add_argument("--no-mac", action="store_true", help="development build without the macOS agent (not a release)")
     ap.add_argument("--mac-kit", type=Path, metavar="DIR", help="only pack the Mac build kit into DIR")
+    ap.add_argument("--host", action="store_true", help="build for this computer only (not a release); needs --stage")
+    ap.add_argument("--stage", type=Path, metavar="DIR", help="with --host: write the unpacked tree to DIR")
     a = ap.parse_args()
+    if a.host or a.stage:
+        if not (a.host and a.stage):
+            raise SystemExit("--host and --stage DIR go together")
+        return host_build(a)
     if a.mac_kit:
         return make_mac_kit(a.mac_kit)
     ver = version()
@@ -361,9 +513,7 @@ def main() -> int:
     mac_tools = None if a.no_mac else check_mac_dylib(a.mac_dylib)  # refuse before building anything
     if not VCVARS.is_file():
         raise SystemExit(f"MSVC not found: {VCVARS}")
-    javac = subprocess.run([str(JDK / "javac"), "-version"], capture_output=True, text=True).stdout.strip()
-    if javac != "javac 25.0.4.1":  # standard 11: pinned toolchain
-        raise SystemExit(f"expected javac 25.0.4.1, found {javac!r}")
+    javac = check_javac()
     gxx = check_gxx()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -373,7 +523,7 @@ def main() -> int:
         if missing_fonts:
             print("WARNING: bundled fonts not in src/loader/app/resources/dev/bitwigre/bml/fonts: " + ", ".join(missing_fonts)
                   + "; the window uses the platform's fonts")
-        (tmp / "manifest.mf").write_text("Main-Class: dev.bitwigre.bml.BmlControlApp\n")
+        jar_manifest(tmp / "manifest.mf", "Main-Class: dev.bitwigre.bml.BmlControlApp", f"Created-By: {JAR_CREATED_BY}")
         stage = tmp / name
         # generated files that may exist in a working tree are never copied: they are built below
         # (and BML.command, the macOS double-click launcher, only ships with the macOS agent)
@@ -400,7 +550,7 @@ def main() -> int:
             "tool_jar_sha256": tool_hashes, "api_jar_sha256": api_sha,
             "control_jar_modules": modules,
             "control_jar_fonts": "bundled" if not missing_fonts else "platform (bundled fonts missing)",
-            "built_with": "JDK 25 javac --release 21 (DarkTitleBar.java --release 22); MSVC (VS Build Tools 2026) /O2 /MT /Brepro; "
+            "built_with": f"{javac} --release 21 (DarkTitleBar.java --release 22); MSVC (VS Build Tools 2026) /O2 /MT /Brepro; "
                           f"{gxx} (WSL {WSL_DISTRO}) -O2 -static-libstdc++"
                           + (f"; {mac_tools}" if mac_tools else "; no macOS agent (--no-mac: not a release)"),
             "source": "loader/src",

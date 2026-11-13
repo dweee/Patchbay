@@ -10,22 +10,25 @@ mods targeting 17 can use it too). Its source is the loader's (loader/src/loader
 loader provides the same classes to mods at runtime; loader/build.py builds the identical jar.
 bml-modkit.jar is the build tool, from modkit/src/tool (javac --release 25: it uses the
 java.lang.classfile API). Both are rebuilt only when their source changes, with fixed jar timestamps,
-so the same source gives the same jars.
+so the same source gives the same jars. The JDK is $BML_JDK_HOME, else the pinned one ($JAVA_HOME is
+not read); any JDK 25 gives the same jars (the same classes, and the manifest is written here).
 
 A build is "<version>" for Windows or "<platform>-<version>" (macos, linux). The compile jar is derived from
 the workspace's bitwig/jars/<version>/, <version>-mac/ or <version>-linux/ (tools/workspace.py; read-only use,
 standard 8) and cached under modkit/cache/, which is never committed (standard 12).
 """
 from __future__ import annotations
-import hashlib, subprocess, sys, tempfile
+import hashlib, os, subprocess, sys, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 OUT = HERE / "out"
 CACHE = HERE / "cache"
-JDK = Path(r"C:\Program Files\Java\jdk-25.0.4.1\bin")
+# the pinned JDK, or the one BML_JDK_HOME names (not JAVA_HOME, as loader/build.py's release builds)
+JDK = Path(os.environ["BML_JDK_HOME"]) / "bin" if os.environ.get("BML_JDK_HOME") else Path(r"C:\Program Files\Java\jdk-25.0.4.1\bin")
 FIXED_DATE = "2026-01-01T00:00:00Z"
+JAR_CREATED_BY = "25.0.4.1 (Oracle Corporation)"  # what the pinned JDK's jar writes; see loader/build.py
 API_SRC = ROOT / "loader/src/loader/api/src"
 sys.path.insert(0, str(ROOT / "tools"))
 import workspace  # noqa: E402
@@ -33,9 +36,10 @@ PARTS = {"bml-api.jar": (API_SRC, "17", None), "bml-modkit.jar": (HERE / "src/to
 
 
 def check_toolchain() -> None:
+    # standard 11: pinned toolchain, 25.0.4.1; any javac 25.0.x was checked to give the same classes.
     javac = subprocess.run([str(JDK / "javac"), "-version"], capture_output=True, text=True).stdout.strip()
-    if javac != "javac 25.0.4.1":  # standard 11: pinned toolchain
-        raise SystemExit(f"expected javac 25.0.4.1, found {javac!r}")
+    if not javac.startswith("javac 25."):
+        raise SystemExit(f"expected javac 25 (pinned 25.0.4.1), found {javac!r}")
 
 
 def source_hash(src: Path) -> str:
@@ -48,13 +52,17 @@ def source_hash(src: Path) -> str:
 def build_jar(src: Path, release: str, main: str | None, target: Path) -> None:
     """javac --release <release> over src/**/*.java, then a jar with fixed timestamps."""
     with tempfile.TemporaryDirectory() as tmp:
-        classes = Path(tmp)
+        classes = Path(tmp) / "classes"
         files = [str(f) for f in sorted(src.rglob("*.java"))]
         subprocess.run([str(JDK / "javac"), "--release", release, "-nowarn", "-encoding", "UTF-8",
                         "-d", str(classes)] + files, check=True)
         target.unlink(missing_ok=True)
-        subprocess.run([str(JDK / "jar"), "--create", "--file", str(target), f"--date={FIXED_DATE}"]
-                       + (["--main-class", main] if main else []) + ["-C", str(classes), "."], check=True)
+        # the manifest the pinned JDK's jar writes for --main-class (CRLF, Created-By first)
+        mf = Path(tmp) / "MANIFEST.MF"
+        mf.write_bytes(("Manifest-Version: 1.0\r\n" f"Created-By: {JAR_CREATED_BY}\r\n"
+                        + (f"Main-Class: {main}\r\n" if main else "") + "\r\n").encode("ascii"))
+        subprocess.run([str(JDK / "jar"), "--create", "--file", str(target), f"--date={FIXED_DATE}",
+                        "--manifest", str(mf), "-C", str(classes), "."], check=True)
 
 
 def ensure() -> dict[str, Path]:
