@@ -2,9 +2,9 @@
 # Prepares the enabled mods for the installed Bitwig, then starts Bitwig: through the BML agent
 # when the prepared runtime needs it, else directly. The Linux and macOS counterpart of
 # launch-bitwig.cmd.
-#   launch-bitwig.sh [path to Bitwig's launcher, default /opt/bitwig-studio/bitwig-studio;
-#                     macOS: Bitwig Studio.app or its Contents/MacOS/BitwigStudio, default the one
-#                     in /Applications]
+#   launch-bitwig.sh [path to Bitwig's launcher, default $BML_BITWIG_EXECUTABLE, else
+#                     /opt/bitwig-studio/bitwig-studio; macOS: Bitwig Studio.app or its
+#                     Contents/MacOS/BitwigStudio, default the one in /Applications]
 set -u
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CORE="$ROOT/loader"

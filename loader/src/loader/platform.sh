@@ -3,8 +3,12 @@
 # BML_OS      uname -s: Linux or Darwin (macOS)
 # BML_NATIVE  the prefix that runs a program natively: "arch -arm64" on Apple silicon (also from a
 #             Terminal that runs under Rosetta), else empty
-# bml_bitwig_exe [PATH]  Bitwig's executable: PATH (on macOS the app bundle may be given), else the
-#                        default, /opt/bitwig-studio/bitwig-studio or the one in /Applications/Bitwig Studio.app
+# bml_bitwig_exe [PATH]  Bitwig's executable: PATH (on macOS the app bundle may be given), else
+#                        $BML_BITWIG_EXECUTABLE, else the default, /opt/bitwig-studio/bitwig-studio or
+#                        the one in /Applications/Bitwig Studio.app
+# bml_bitwig_home EXE    $BML_BITWIG_HOME with links resolved, when it is set and EXE is the default Bitwig
+#                        (bml_bitwig_exe without PATH); else fails. It names Bitwig's install folder (the
+#                        .app on macOS) when the executable is a wrapper outside it, as Nix's are
 # bml_bitwig_bin EXE     the folder holding bitwig.jar: <Bitwig>/bin, or Contents/Java in the app bundle
 # bml_real_path FILE     FILE's absolute path with links resolved (readlink -f, which older macOS lacks)
 # bml_unquarantine ROOT  macOS: removes the download quarantine from BML's own folder, ROOT (after
@@ -28,7 +32,7 @@ BML_NATIVE=""
 if [ "$BML_OS" = Darwin ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then BML_NATIVE="arch -arm64"; fi
 
 bml_bitwig_exe() {
-  _bml_e=${1:-}
+  _bml_e=${1:-${BML_BITWIG_EXECUTABLE:-}}
   if [ -z "$_bml_e" ]; then
     if [ "$BML_OS" = Darwin ]; then _bml_e="/Applications/Bitwig Studio.app/Contents/MacOS/BitwigStudio"; else _bml_e=/opt/bitwig-studio/bitwig-studio; fi
   fi
@@ -36,7 +40,18 @@ bml_bitwig_exe() {
   printf '%s\n' "$_bml_e"
 }
 
+bml_bitwig_home() {
+  [ -n "${BML_BITWIG_HOME:-}" ] && [ -e "$1" ] || return 1
+  _bml_g=$(bml_bitwig_exe "")
+  [ -e "$_bml_g" ] && [ "$(bml_real_path "$_bml_g")" = "$(bml_real_path "$1")" ] || return 1
+  bml_real_path "$BML_BITWIG_HOME"
+}
+
 bml_bitwig_bin() {
+  if _bml_h=$(bml_bitwig_home "$1"); then
+    if [ "$BML_OS" = Darwin ]; then printf '%s/Contents/Java\n' "$_bml_h"; else printf '%s/bin\n' "$_bml_h"; fi
+    return 0
+  fi
   if [ "$BML_OS" = Darwin ]; then printf '%s/Java\n' "$(dirname -- "$(dirname -- "$1")")"; else printf '%s/bin\n' "$(dirname -- "$1")"; fi
 }
 
@@ -92,6 +107,10 @@ bml_java_ok() {
 
 bml_bitwig_java() {
   _bml_x=$(bml_bitwig_exe "${1:-}")
+  if _bml_h=$(bml_bitwig_home "$_bml_x"); then
+    if [ "$BML_OS" = Darwin ]; then bml_mac_java "$_bml_h/Contents"; else bml_runtime_java "$_bml_h/lib/jre"; fi
+    return
+  fi
   if [ "$BML_OS" = Darwin ]; then
     bml_mac_java "$(dirname -- "$(dirname -- "$_bml_x")")"
     return

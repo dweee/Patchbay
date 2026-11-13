@@ -12,6 +12,8 @@ final class BmlConfig {
     static final String MODS_SHOW = "ui.mods.show";
     private final BmlPaths paths;
     private final Properties props = new Properties();
+    /** BML_BITWIG_EXECUTABLE: the Bitwig used while none is chosen; never saved (a Nix store path changes). */
+    private String envDefault;
 
     BmlConfig(BmlPaths paths) { this.paths = paths; }
 
@@ -20,7 +22,9 @@ final class BmlConfig {
         if (Files.isRegularFile(paths.configFile)) {
             try (Reader r = Files.newBufferedReader(paths.configFile, StandardCharsets.UTF_8)) { props.load(r); }
         }
-        if (props.getProperty(BITWIG_EXE, "").isBlank()) {
+        String env = System.getenv("BML_BITWIG_EXECUTABLE");
+        envDefault = env == null || env.isBlank() ? null : env.trim();
+        if (props.getProperty(BITWIG_EXE, "").isBlank() && envDefault == null) {
             String pf = System.getenv("ProgramFiles");
             if (pf != null && !pf.isBlank()) {
                 props.setProperty(BITWIG_EXE, Path.of(pf, "Bitwig Studio", "Bitwig Studio.exe").toString());
@@ -47,18 +51,37 @@ final class BmlConfig {
     /** The folder holding Bitwig's bitwig.jar and libs.jar: <Bitwig>/bin on Windows and Linux,
      *  Contents/Java beside Contents/MacOS (the executable's folder) in the macOS app bundle. */
     static Path jarFolder(Path executable) {
+        Path home = bitwigHome(executable);
+        if (home != null) return BmlPaths.MAC ? home.resolve("Contents/Java") : home.resolve("bin");
         Path dir = executable.getParent();
         if (BmlPaths.MAC && dir.getFileName() != null && dir.getFileName().toString().equals("MacOS")) return dir.resolveSibling("Java");
         return dir.resolve("bin");
     }
 
+    /** BML_BITWIG_HOME with links resolved, when it is set and the executable is the default Bitwig
+     *  (BML_BITWIG_EXECUTABLE, else the default location); else null. It names Bitwig's install folder
+     *  (the .app on macOS) when the executable is a wrapper outside it, as Nix's are. Never saved. */
+    static Path bitwigHome(Path executable) {
+        String home = System.getenv("BML_BITWIG_HOME"), env = System.getenv("BML_BITWIG_EXECUTABLE");
+        if (BmlPaths.WINDOWS || home == null || home.isBlank() || executable == null) return null;
+        try {
+            Path def = env == null || env.isBlank() ? (BmlPaths.MAC ? MAC_DEFAULT : LINUX_DEFAULT)
+                    : executableOf(Path.of(env.trim()).toAbsolutePath());
+            if (!def.toRealPath().equals(executable.toRealPath())) return null;
+            return Path.of(home.trim()).toAbsolutePath().toRealPath();
+        } catch (IOException | RuntimeException e) { return null; }
+    }
+
     Path bitwigExecutable() {
         String s = props.getProperty(BITWIG_EXE, "").trim();
+        boolean fromEnv = s.isBlank() && envDefault != null;
+        if (fromEnv) s = envDefault;
         if (s.isBlank()) return null;
         Path p = executableOf(Path.of(s).toAbsolutePath().normalize());
         // Outside Windows the launcher is often chosen through a link (/usr/bin/bitwig-studio);
         // Bitwig's folders (bin/, lib/jre) are found next to the file the link points to.
-        if (!BmlPaths.WINDOWS && Files.isSymbolicLink(p)) {
+        // BML_BITWIG_EXECUTABLE (a Nix profile's bin/bitwig-studio) may be inside linked folders too.
+        if (!BmlPaths.WINDOWS && (fromEnv || Files.isSymbolicLink(p))) {
             try { p = p.toRealPath(); } catch (IOException ignored) {}
         }
         return p;

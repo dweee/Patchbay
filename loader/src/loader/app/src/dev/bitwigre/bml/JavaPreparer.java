@@ -114,6 +114,14 @@ public final class JavaPreparer {
         }
     }
     private static String defaultBin() {
+        String env = System.getenv("BML_BITWIG_EXECUTABLE");
+        if (env != null && !env.isBlank()) {
+            // Bitwig's folders are beside the file a link (a Nix profile's bin/bitwig-studio) points to,
+            // or in BML_BITWIG_HOME when that is set (a wrapper outside them); see BmlConfig.jarFolder.
+            Path exe = BmlConfig.executableOf(Path.of(env.trim()).toAbsolutePath());
+            try { exe = exe.toRealPath(); } catch (IOException ignored) {}
+            return BmlConfig.jarFolder(exe).toString();
+        }
         if (mac()) return "/Applications/Bitwig Studio.app/Contents/Java";
         if (!windows()) return "/opt/bitwig-studio/bin";
         String pf = System.getenv("ProgramFiles");
