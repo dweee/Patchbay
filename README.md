@@ -54,6 +54,58 @@ The build tools expect a workspace: one folder holding this repository as `BML/`
 
 Building needs JDK 25.0.4.1 (`javac --release 21`), Python 3 and, for the native agents, MSVC from Visual Studio Build Tools 2026 (Windows), GCC 13.3.0 in WSL Ubuntu 24.04 (Linux) and, on a Mac, Xcode Command Line Tools 26.6 (macOS; `loader/build.py --mac-kit` packs what the Mac build needs). Never commit Bitwig's files or anything built: `.gitignore` keeps them out.
 
+## Nix
+
+The flake builds Patchbay on and for the computer it runs on: Linux (x64, arm64) and macOS (Apple silicon, Intel). That is a host build, not a release, and it says so in its files. Any JDK 25 is enough: the build checks that its eight tool jars and `bml-modkit.jar` are byte-identical to those of the release BML-0.36.0-dev.9 (the window's and the API's source is newer than that release, so their jars aren't compared). The native agent is built with nixpkgs' compiler, not the release's pinned one. On a Mac the agent is universal (arm64 + x86_64), as in the release; the macOS package was built and checked on an aarch64-darwin builder (universal dylib, tool jars matching the release's with Zulu 25.0.3).
+
+```sh
+nix run github:dweee/Patchbay     # opens the Patchbay window
+```
+
+The package gives `patchbay` (the window), `bml-launch-bitwig` (prepares the ticked mods and starts Bitwig) and `bml-modkit` (the mod kit tool). The Nix store is read-only, so `patchbay` copies BML into a folder of yours and runs it from there: `$BML_ROOT`, else `$XDG_DATA_HOME/bml` (`~/.local/share/bml`), on macOS too. A new version replaces only BML's own files there; mods, maps, sessions, logs and state stay. Your settings stay where [Where BML keeps things](#where-bml-keeps-things) says.
+
+As a flake input, for NixOS and nix-darwin:
+
+```nix
+{
+  inputs.patchbay.url = "github:dweee/Patchbay";
+
+  # in nixosSystem / darwinSystem: modules = [ inputs.patchbay.nixosModules.default ... ];
+  # (darwinModules.default for nix-darwin)
+  programs.patchbay = {
+    enable = true;
+    bitwigPackage = pkgs.bitwig-studio-latest;  # Linux; on macOS: bitwigApp = "/Applications/Bitwig Studio.app";
+  };
+}
+```
+
+Bitwig isn't part of this flake. `bitwigPackage` takes one from a flake that packages it, e.g. `bitwig-studio-latest` from an overlay of [audio.nix](https://github.com/polygon/audio.nix) (Linux x64 only); it is installed and its `bin/bitwig-studio` becomes Patchbay's default Bitwig (`BML_BITWIG_EXECUTABLE`) while none is picked in **Settings**. A Bitwig already saved in `bml.properties` (`bitwig.executable`, from an earlier pick) wins over it: pick the Nix one in **Settings**, or remove that line, to use it. Never saved itself, so a new store path is picked up.
+
+audio.nix's `bitwig-studio-latest` is a bubblewrap wrapper: its `bin/bitwig-studio` is a script, and Bitwig's files (`bin/bitwig.jar`, `lib/jre`) are in the unwrapped package's `libexec`. `bitwigHome` (`BML_BITWIG_HOME`) names that folder; by default it is found in `bitwigPackage` when the package is built (its `libexec`, else the folder `bin/bitwig-studio-unwrapped` links to), and it can be set by hand, e.g. `"${pkgs.bitwig-studio6-1-unwrapped}/libexec"`. Patchbay reads Bitwig's jars and Java there and still starts the wrapper, so the sandbox stays. `BML_BITWIG_HOME` applies only to the default Bitwig; without it, Bitwig's files are looked for beside the file the executable links to. `java` sets the Java Patchbay uses (`BML_JAVA`).
+
+With home-manager (`inputs.patchbay.homeManagerModules.default`) the same options apply, plus BML's folder and mods and map packs copied into it from Nix:
+
+```nix
+programs.patchbay = {
+  enable = true;
+  root = "${config.xdg.dataHome}/bml";        # the default; sets BML_ROOT
+  mods.my-mod = ./mods/my-mod;                 # <root>/mods/my-mod
+  mapPacks."linux-6.1.4" = ./maps/linux-6.1.4; # <root>/maps/linux-6.1.4
+};
+```
+
+BML refuses linked mod and map folders, so activation copies each one in as an ordinary, writable folder and lists it in `<root>/.hm-managed`. A copy is replaced when its Nix source changes and removed when it is no longer declared; nothing else in `mods/` or `maps/` is touched, and a folder of your own with a declared name stops the activation. Ticking a mod is still done in the window. `bml.properties` is never managed: the window writes it.
+
+The modules' `package` defaults to this flake's own build (or `pkgs.patchbay` when `overlays.default` is applied), not one rebuilt with your nixpkgs.
+
+To build by hand, `nix develop` gives JDK 25 (`JAVA_HOME`, `BML_JDK_HOME`), Python 3 and a C++ compiler (on macOS also `lipo`):
+
+```sh
+nix develop
+python loader/build.py --host --stage /tmp/bml   # this computer only, not a release
+python modkit/build.py                           # modkit/out/bml-api.jar, bml-modkit.jar
+```
+
 ## Licence
 
 MIT ([`LICENSE`](LICENSE)). Framework: Themes builds on Berikai's [Bitwig Theme Editor](https://github.com/Berikai/bitwig-theme-editor); its notice is in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
