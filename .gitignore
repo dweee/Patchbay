@@ -39,3 +39,7 @@ jre/
 # Bundled fonts (SIL OFL): third-party, kept out of git; sources and SHA-256 in loader/src/loader/app/resources/dev/bitwigre/bml/fonts/FONTS.md
 loader/src/loader/app/resources/dev/bitwigre/bml/fonts/*.ttf
 loader/src/loader/app/resources/dev/bitwigre/bml/fonts/OFL-*.txt
+
+# nix build outputs
+/result
+/result-*
