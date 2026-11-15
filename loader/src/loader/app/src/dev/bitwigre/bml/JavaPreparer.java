@@ -22,7 +22,7 @@ import java.util.regex.*;
  * Experimental implementation: requires Windows 6.1.3 user runtime acceptance.
  */
 public final class JavaPreparer {
-    static final String LOADER_VERSION = "0.36.0-dev.14";
+    static final String LOADER_VERSION = "0.36.0-dev.16";
     private static final String TSV = "\t";
     private final Path loader, bitwigBin, modsRoot, componentsRoot, runtime, stockJar;
     private final BmlPaths paths;
@@ -349,7 +349,8 @@ public final class JavaPreparer {
         Path jvmti=loader.resolve("jvmti");
         hashTree(add,"loader",loader,p->p.startsWith(runtime) || p.startsWith(jvmti.resolve("reports"))
             || p.equals(jvmti.resolve("active-session.txt")) || p.equals(jvmti.resolve("bin").resolve("session.conf")));
-        hashTree(add,"maps",root.resolve("maps"),p->false);
+        Path maps=root.resolve("maps");
+        hashTree(add,"maps",maps,p->MapPackCatalog.strayFile(maps,p));
         List<Path> preserved=preservedResources(add);
         hashTree(add,"mods",modsRoot,p->preserved.stream().anyMatch(p::startsWith));
         add.accept("selection_active="+environment.getOrDefault("BML_MOD_SELECTION_ACTIVE",""));
@@ -1601,10 +1602,24 @@ public final class JavaPreparer {
         verifyTargets.addAll(opens.keySet());
         for(AddedField f:addedFields)verifyTargets.add(dot(f.owner()));
         for(String entry:helperEntries.keySet())if(entry.endsWith(".class")&&!entry.equals("module-info.class"))verifyTargets.add(dot(entry.substring(0,entry.length()-6)));
-        List<String> cmd=new ArrayList<>();add(cmd,bundled.toString(),"-Xverify:all","-cp",String.join(File.pathSeparator,cp),"dev.bitwigre.loader.DeepClassVerifier");
-        cmd.addAll(verifyTargets);
-        for(String line:exec(cmd,"Deep verification"))patchReport.add("DEEP_VERIFY"+TSV+line);
+        // Everything after the java executable goes in a Java argument file: the class list grows
+        // with every mod and Windows caps a command line at 32,767 characters (error 206).
+        List<String> args=new ArrayList<>();add(args,"-Xverify:all","-cp",String.join(File.pathSeparator,cp),"dev.bitwigre.loader.DeepClassVerifier");
+        args.addAll(verifyTargets);
+        Path argFile=runtime.resolve("deep-verify.args");
+        StringBuilder text=new StringBuilder();
+        for(String a:args)text.append(argFileQuote(a)).append('\n');
+        Files.writeString(argFile,text,StandardCharsets.UTF_8);
+        try {
+            for(String line:exec(List.of(bundled.toString(),"@"+argFile),"Deep verification"))patchReport.add("DEEP_VERIFY"+TSV+line);
+        } finally {
+            Files.deleteIfExists(argFile);
+        }
         debug("Deep-verified "+verifyTargets.size()+" classes");
+    }
+    /** One argument for a java launcher @argfile: quoted, with backslashes and quotes escaped. */
+    private static String argFileQuote(String arg) {
+        return "\""+arg.replace("\\","\\\\").replace("\"","\\\"")+"\"";
     }
     /** Optional exact-runtime diagnostic targets, independent of any mod manifest.
      * Only read in Debug Mode; never edits or packages the original mod.

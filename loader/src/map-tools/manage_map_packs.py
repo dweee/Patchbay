@@ -26,6 +26,22 @@ HEX = re.compile(r"^[a-fA-F0-9]{64}$")
 SCHEMA = "bml-map-pack-v1"
 
 
+def junk_name(path: Path) -> bool:
+    """A name a file manager or the OS leaves behind: hidden (.DS_Store, ._x), Thumbs.db, desktop.ini."""
+    return path.name.startswith(".") or path.name.casefold() in ("thumbs.db", "desktop.ini")
+
+
+def stray_entry(path: Path) -> bool:
+    """An entry of maps/ that isn't a map pack: a plain file, or a hidden folder. Never a symlink."""
+    return not path.is_symlink() and (path.is_file() or (junk_name(path) and path.is_dir()))
+
+
+def pack_files(directory: Path) -> list[Path]:
+    """The pack's files, leaving out junk names anywhere in it (symlinks are kept, to be refused)."""
+    return sorted(p for p in directory.rglob("*") if (p.is_file() or p.is_symlink())
+                  and not any(junk_name(Path(x)) for x in p.relative_to(directory).parts))
+
+
 def sha(path: Path) -> str:
     with path.open("rb") as src:
         digest = sha256()
@@ -68,7 +84,7 @@ def check(directory: Path, *, allow_unsealed=False) -> dict:
     remap_dir = directory / "remap"
     if not remap_dir.is_dir() or remap_dir.is_symlink():
         raise ValueError("Missing remap directory")
-    payload = sorted(p for p in directory.rglob("*") if p.is_file() and p.name != "map.json")
+    payload = [p for p in pack_files(directory) if p.name != "map.json"]
     actual = {}
     for file in payload:
         if file.is_symlink():
@@ -90,7 +106,7 @@ def check(directory: Path, *, allow_unsealed=False) -> dict:
 def seal(directory: Path) -> None:
     meta = check(directory, allow_unsealed=True)
     meta["file_sha256"] = {p.relative_to(directory).as_posix(): sha(p) for p in
-                           sorted(directory.rglob("*")) if p.is_file() and p.name != "map.json"}
+                           pack_files(directory) if p.name != "map.json"}
     (directory / "map.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     check(directory)
     print(f"SEALED map={meta['id']} version={meta['version']} files={len(meta['file_sha256'])}")
@@ -102,7 +118,7 @@ def bundle(directory: Path, output: Path) -> None:
         raise FileExistsError(f"Refusing to overwrite map ZIP: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "x", zipfile.ZIP_DEFLATED, compresslevel=7) as dest:
-        for file in sorted(directory.rglob("*")):
+        for file in pack_files(directory):
             if file.is_file():
                 dest.write(file, (PurePosixPath(meta["id"]) / file.relative_to(directory).as_posix()).as_posix())
     with zipfile.ZipFile(output) as verify:
@@ -143,6 +159,8 @@ def install(archive: Path, bml_root: Path) -> None:
             meta = check(staged)
             current = maps / mid
             for neighbor in maps.iterdir():
+                if stray_entry(neighbor):
+                    continue
                 if neighbor.name.casefold() == mid.casefold() and neighbor.name != mid:
                     raise ValueError(f"Case-colliding map ID already installed: {neighbor.name}")
                 if neighbor.is_dir() and neighbor != current:
@@ -191,6 +209,8 @@ def main() -> None:
     else:
         maps=args.bml_root/"maps"
         for item in sorted(maps.iterdir()) if maps.is_dir() else []:
+            if stray_entry(item):
+                continue
             meta=check(item)
             print(f"{meta['id']}\t{meta['version']}\t{meta['target_build_key']}\t{meta['target_jar_sha256']}")
 

@@ -51,7 +51,7 @@ final class MapPacks {
         List<Pack> out=new ArrayList<>();
         if(!Files.isDirectory(maps))return out;
         try(Stream<Path> dirs=Files.list(maps)){
-            for(Path dir:dirs.filter(Files::isDirectory).sorted().toList()){
+            for(Path dir:dirs.filter(Files::isDirectory).filter(d->!MapPackCatalog.junkName(d)).sorted().toList()){
                 try{
                     Map<String,Object> m=SimpleJson.object(SimpleJson.parse(Files.readString(dir.resolve("map.json"),StandardCharsets.UTF_8)));
                     Map<String,String[]> builds=new HashMap<>();  // build key -> version, platform, architecture
