@@ -22,7 +22,7 @@ Patchbay Mod Loader loads mods into Bitwig Studio; its window is called Patchbay
 
 `INSTALL.md` inside the ZIP has the full steps, including what to check in **Settings** and **Maps** and what to send when something goes wrong.
 
-The release contains the loader, the map packs, the eight frameworks and every accepted mod. The mods' source is in the [Mods](https://github.com/shaboogen-dev/Mods) repository.
+The release contains the loader, the map packs and the ten frameworks. Mods are separate downloads from the [Mods releases page](https://github.com/shaboogen-dev/Mods/releases): add them in Patchbay with **Add Mod…**. Their source is in the [Mods](https://github.com/shaboogen-dev/Mods) repository.
 
 ## Where BML keeps things
 
