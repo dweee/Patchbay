@@ -5,7 +5,7 @@
     "name": "Framework: Notifications",
     "version": "0.3.0-dev.1",
     "author": "shaboogen",
-    "description": "Lets mods post toasts, messages and running tasks to Bitwig's notification centre, in plain Java. Mods can also lay out the centre's rows, watch its entries and take its toasts.",
+    "description": "Lets mods post toasts, messages and running tasks to Bitwig's notification centre, in plain Java. Mods can also lay out the centre's rows, watch its entries and take its toasts",
     "area": "Framework"
   },
   "built_against": {

@@ -6,7 +6,7 @@
     "area": "Framework",
     "version": "1.3.0-dev.3",
     "author": "shaboogen",
-    "description": "Loads your own Nitro devices, modulators and Grid modules into Bitwig, from the folders you choose in Device Folders.",
+    "description": "Loads your own Nitro devices, modulators and Grid modules into Bitwig, from the folders you choose in Device Folders",
     "documentation": "readme"
   },
   "built_against": {
