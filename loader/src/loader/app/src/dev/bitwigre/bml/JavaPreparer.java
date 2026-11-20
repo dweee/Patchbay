@@ -22,7 +22,7 @@ import java.util.regex.*;
  * Experimental implementation: requires Windows 6.1.3 user runtime acceptance.
  */
 public final class JavaPreparer {
-    static final String LOADER_VERSION = "0.36.0-dev.16";
+    static final String LOADER_VERSION = "0.36.0-dev.17";
     private static final String TSV = "\t";
     private final Path loader, bitwigBin, modsRoot, componentsRoot, runtime, stockJar;
     private final BmlPaths paths;
@@ -85,6 +85,8 @@ public final class JavaPreparer {
         String ownerJar,ownerDot,method,descriptor,methodFrom="",bodyTemplate="";
         String matchOpcode="",matchOwner="",matchMethod="",matchDescriptor="",matchTarget="";
         int occurrence=1,originalCall,sequence,applySequence,entryOrder;
+        /** "returns": "all": the bridge runs at every return of the method, not only the final one. */
+        boolean allReturns;
         List<String> before = new ArrayList<>(), after = new ArrayList<>();
         String identity() {return mod.id+"::"+id;}
         String physicalKey() {return ownerDot+"|"+method+"|"+descriptor;}
@@ -1101,6 +1103,14 @@ public final class JavaPreparer {
                 h.transform=required(raw,"transform",h.identity());
                 if(!Set.of("INSERT_BEFORE_FINAL_RETURN","INSERT_AT_ENTRY","WRAP_OBJECT_RETURN","REPLACE_INVOKE","ADD_METHOD","REORDER_NATIVE_COMMANDER").contains(h.transform))
                     throw new IOException("Unsupported transform "+h.transform+" for "+h.identity());
+                if(raw.containsKey("returns")) {
+                    Object returns=raw.get("returns");
+                    if(!Set.of("INSERT_BEFORE_FINAL_RETURN","WRAP_OBJECT_RETURN").contains(h.transform))
+                        throw new IOException("returns applies only to INSERT_BEFORE_FINAL_RETURN and WRAP_OBJECT_RETURN: "+h.identity());
+                    if(!"final".equals(returns)&&!"all".equals(returns))
+                        throw new IOException("returns must be \"final\" or \"all\": "+h.identity());
+                    h.allReturns="all".equals(returns);
+                }
                 h.target=required(raw,"target",h.identity());
                 h.bridgeMethod=required(bridge,"method",h.identity()+" bridge");
                 h.bridgeDescriptor=remapBridgeDescriptor(m,required(bridge,"descriptor",h.identity()+" bridge"));
@@ -1422,7 +1432,9 @@ public final class JavaPreparer {
         }
         for(var ent:owners.entrySet()) {
             String owner=ent.getKey(),stem=classFileStem(owner);Path current=null;
-            List<Hook> transforms=ent.getValue().stream().sorted(Comparator.comparingInt(h->h.applySequence)).toList();
+            // A "returns": "all" hook moves its method's body into a new method, so it goes after every other hook on
+            // the class: those patch the body where they expect it. A class without one keeps the plain order.
+            List<Hook> transforms=ent.getValue().stream().sorted(Comparator.comparing((Hook h)->h.allReturns).thenComparingInt(h->h.applySequence)).toList();
             // Which call each REPLACE_INVOKE means, numbered in the original method. A mod's occurrence
             // counts the calls left after that mod's own earlier hooks; other mods' hooks don't move it.
             Map<String,TreeSet<Integer>> takenByMod=new HashMap<>();
@@ -1501,18 +1513,18 @@ public final class JavaPreparer {
                 }else {
                     boolean entry=h.transform.equals("INSERT_AT_ENTRY"),fin=h.transform.equals("INSERT_BEFORE_FINAL_RETURN");
                     cmd.add(tools.resolve(entry?"bitwig-typed-local-patcher.jar":"bitwig-mod-preparer.jar").toString());
-                    String suffix=entry?"entry":fin?"final":"wrap-object";
+                    String suffix=(entry?"entry":fin?"final":"wrap-object")+(h.allReturns?"-all":"");
                     add(cmd,current==null?"patch-jar-"+suffix:"patch-class-"+suffix,current==null?stockJar.toString():current.toString());
                     if(current==null)cmd.add(h.ownerJar);
                     add(cmd,tmp.toString(),h.method,h.descriptor,h.helperClass,h.bridgeMethod,h.bridgeDescriptor);
                     if(!h.argsCsv.isBlank())cmd.add(h.argsCsv);
                 }
-                debug("Patching "+h.identity()+" "+h.transform+" "+h.physicalKey());
+                debug("Patching "+h.identity()+" "+h.transform+(h.allReturns?" (every return)":"")+" "+h.physicalKey());
                 long toolStart=System.nanoTime();
                 patchReport.addAll(exec(cmd,context));
                 progress.hookDone(h.mod.id,System.nanoTime()-toolStart);
                 composition.add(String.join(TSV, Integer.toString(h.applySequence),Integer.toString(h.sequence),h.entryOrder==0?"":Integer.toString(h.entryOrder),
-                    h.mod.id,h.id,h.target,h.ownerDot,h.method,h.descriptor,h.transform,String.join(";",h.before),String.join(";",h.after),
+                    h.mod.id,h.id,h.target,h.ownerDot,h.method,h.descriptor,h.transform+(h.allReturns?" returns=all":""),String.join(";",h.before),String.join(";",h.after),
                     h.methodFrom,h.bodyTemplate,h.helperClass+"."+h.bridgeMethod+h.bridgeDescriptor,h.argsCsv,h.matchOpcode,h.matchTarget,
                     h.matchOwner,h.matchMethod,h.matchDescriptor,Integer.toString(h.occurrence),h.originalCall==0?"":Integer.toString(h.originalCall)));
                 List<Hook> completedChain=chainStarts.get(h);

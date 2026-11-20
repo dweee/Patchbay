@@ -1,13 +1,13 @@
 # Framework: Actions and Menus
 
-Framework: Actions and Menus does nothing on its own. It gives modders an API for adding their own actions to Bitwig and placing them, or Bitwig's own actions, in Bitwig's menus.
+Framework: Actions and Menus does nothing on its own. It gives modders an API for adding their own actions to Bitwig and placing them, or Bitwig's own actions, in Bitwig's menus, and for giving Bitwig's buttons modifier clicks named in the status bar hint.
 
 Each action is a real Bitwig action: the user can give it a shortcut in Settings > Shortcuts and find it in the Commander, unless the mod makes it menu-only. The framework creates the Bitwig action, registers it, binds it in every project window (or on the widgets the mod names) and places it in the menus the mod names. The mod never touches Bitwig's action internals.
 
 <!-- image: a right-click menu with Bitwig's entries, a separator, then a mod's submenu and actions -->
 
 - Mod ID: `action-menu-composition-framework`. Java package: `bml.actions`.
-- Built against Bitwig 6.1.4; prepares on Bitwig 6.0 to 6.1.4.
+- Built against Bitwig 6.1.4; prepares on Bitwig 6.0 to 6.1.7.
 - Needs Patchbay 0.34.0-dev.7 or later (manifest `registrations` and `bitwig` resources, `bml.api.Bml`).
 
 ## Contributing actions
@@ -245,6 +245,38 @@ What the action was invoked on. Every getter except `widget()` returns `null` wh
 Bitwig's objects are returned as `Object`; a mod built with the mod kit casts them to the Bitwig class it expects (`bitwig.obf...`). The context is captured when the menu opens, so it stays correct if the selection changes before the item is chosen.
 
 `ActionContext`'s static methods and `withWidget` are the framework's own way of building contexts; mods only read contexts.
+
+## Modifier clicks
+
+`bml.actions.Clicks` gives one of Bitwig's buttons a Shift-click, Ctrl-click (Cmd-click on macOS) or other modifier click, named in Bitwig's status bar hint the way Bitwig names its own ("SHIFT+CLICK Arm exclusively"). A mod calls it from its own code, usually a hook on the method that builds the button. It needs no registration: add the framework to `requires` and compile against its `helper.jar`.
+
+```java
+import bml.actions.Clicks;
+
+// Once per button, when it is built:
+Clicks.hint(button, () -> MyMod.exclusive() ? "Arm (and clear all others)" : null); // null: Bitwig's own hint
+Clicks.Click exclusive = Clicks.click("my_mod_arm_exclusive", "Arm exclusively", () -> armOnly(track));
+Clicks.Click keep = Clicks.click("my_mod_arm_keep", "Arm without disarming others", () -> toggle(track));
+Clicks.onModifierClick(button, Clicks.Modifier.SHIFT, () -> MyMod.exclusive() ? keep : exclusive);
+Clicks.onModifierClick(button, Clicks.Modifier.SHORTCUT, () -> MyMod.exclusive() ? keep : null);
+```
+
+| Call | Meaning |
+|---|---|
+| `Clicks.click(clickId, label, run)` | A click: `label` is shown in the status bar hint after the modifier; `run` runs on Bitwig's UI thread when the user clicks. `clickId` names it for Bitwig only: it is never shown and never registered as an action, so it has no shortcut and isn't in the Commander. Prefix it with the mod ID. Make each click once and reuse it. |
+| `Clicks.onModifierClick(widget, modifier, current)` | Gives the button a click with `modifier` held. `current` returns a click made with `Clicks.click`, or `null` for none. |
+| `Clicks.hint(widget, text)` | Sets the hint for a plain click on any Bitwig widget (shown after "CLICK"), for a widget whose plain click has none of its own. |
+| `Clicks.hint(widget, () -> text)` | Sets the hint for a plain click on a Bitwig button from a supplier asked every time the hint is rebuilt, so it can follow a setting. The click itself stays Bitwig's own; only its hint changes, and no click is added. `null` shows Bitwig's own hint. |
+
+`Clicks.Modifier`: `SHIFT`, `SHORTCUT` (Ctrl on Windows and Linux, Cmd on macOS), `ALT`, `SHIFT_SHORTCUT`, `SHIFT_ALT`, `SHORTCUT_ALT`.
+
+- **`current` is asked every time** Bitwig rebuilds the status bar hint, which is on every mouse move over the button, and again when the user clicks. So the hint and what a click does follow whatever `current` reads, such as a setting, with no restart. Keep it to a field read and a choice between clicks made beforehand.
+- **`null` means no click:** the hint has no entry for that modifier, and a click with it held does nothing (it doesn't fall through to the plain click).
+- Bitwig appends the button's own shortcut to a plain click's hint; a supplied hint keeps it.
+- A modifier with no click of its own on the button does what a plain click does, and Bitwig leaves it out of the hint when its text matches the plain click's. A supplied plain-click hint is used for those modifiers too, so they stay out of the hint as they do without mods.
+- `widget` is one of Bitwig's buttons: a `bitwig.obf` widget that takes clicks, such as a toggle button. Anything else is an `IllegalArgumentException`. A second call for the same button and modifier replaces the first, as Bitwig does for its own.
+- Which modifiers a mod uses, and what the hint says, are the mod's choice. The order of the entries in the hint is Bitwig's.
+- An exception from `run` or from `current` is logged with the click ID and contained; a `current` that throws counts as `null`.
 
 ## Behaviour and failures
 

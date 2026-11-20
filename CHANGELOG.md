@@ -2,6 +2,13 @@
 
 Changes to Patchbay Mod Loader, newest first. Mods have their own notes on the [Mods releases page](https://github.com/shaboogen-dev/Mods/releases). Versions before 0.36.0-dev.13 were test builds; their notes are on the [releases page](https://github.com/shaboogen-dev/Patchbay/releases).
 
+## 0.36.0-dev.17 (20 Nov 2026)
+
+### Added
+
+- **Framework: Actions and Menus 0.9.0-dev.4:** `bml.actions.Clicks` lets a mod give a button Shift-, Ctrl/Cmd- or Alt-click actions with their own text in the status bar hint, change that text as a setting changes, and set the text of the button's plain click. Clicks keep working as Bitwig's own.
+- **For modders:** a hook can run at every return of its method, not only the last one: `"returns": "all"` in the manifest, or `@Hook(..., allReturns = true)` with the mod kit (0.1.0-dev.2). Hooks without it work exactly as before. The modder guide now says exactly which return each hook acts on.
+
 ## 0.36.0-dev.16 (15 Nov 2026)
 
 ### Fixed

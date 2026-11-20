@@ -9,7 +9,8 @@ import java.util.zip.*;
 /**
  * BML semantic mod preparer: the original classfile patcher, now used for INSERT_BEFORE_FINAL_RETURN
  * and WRAP_OBJECT_RETURN (INSERT_AT_ENTRY moved to TypedLocalPatcher, which also loads primitive
- * bridge args with their own opcodes; this one loads every arg with ALOAD).
+ * bridge args with their own opcodes; this one loads every arg with ALOAD). Both run at the method's
+ * final return only, unless the hook asks for every return ("returns": "all", the *-all commands).
  *
  * Source recovered on 27 Oct 2026 from the accepted bitwig-mod-preparer.jar, of which no source
  * survived: decompiled with Vineflower, then rewritten in TypedLocalPatcher's style (its successor,
@@ -53,6 +54,7 @@ public final class SemanticModPreparer {
         int clazz(int name)throws IOException{int i=next++;bytes.write(7);bytes.write(p2(name));return i;}
         int nat(int name,int desc)throws IOException{int i=next++;bytes.write(12);bytes.write(p2(name));bytes.write(p2(desc));return i;}
         int methodRef(int cls,int nat)throws IOException{int i=next++;bytes.write(10);bytes.write(p2(cls));bytes.write(p2(nat));return i;}
+        int interfaceMethodRef(int cls,int nat)throws IOException{int i=next++;bytes.write(11);bytes.write(p2(cls));bytes.write(p2(nat));return i;}
     }
     private record Appended(byte[] bytes,int methodRef){}
     private static Appended appendBridgeRef(byte[] data,String helperOwner,String helperMethod,String helperDesc)throws IOException{
@@ -312,6 +314,104 @@ public final class SemanticModPreparer {
         if(matches!=1)throw new IOException("expected exactly one target method "+method+desc+", found "+matches);return new Patched(result,oldLen,newLen,oldMs,newMs);
     }
 
+    /*
+     * Every return (a hook's "returns": "all"). The target's body moves, unchanged, into a new private synthetic method of
+     * the same class and descriptor, and the target's own Code becomes: call the moved body with this and the parameters,
+     * then run the bridge on what it returned, then return. Every return of the body comes back through that one point, so
+     * the bridge runs after each of them; no branch, switch, frame or exception range is moved. The bridge's this / argN
+     * are the method's own: "this" and the parameters as passed in (argN must be a parameter's slot and an object), since
+     * the body's other locals no longer exist where the bridge runs. Constructors and static initializers can't be moved.
+     */
+    private static final int ACC_PRIVATE=0x0002,ACC_STATIC=0x0008,ACC_NATIVE=0x0100,ACC_INTERFACE=0x0200,ACC_ABSTRACT=0x0400,ACC_STRICT=0x0800,ACC_SYNTHETIC=0x1000;
+    /** A parameter's first local slot and its kind: I (int, boolean, byte, char, short), F, J, D or L (object or array). */
+    private record Param(int slot,char kind){}
+    private static List<Param> params(String desc,boolean isStatic)throws IOException{
+        if(desc.isEmpty()||desc.charAt(0)!='(')throw new IOException("invalid method descriptor: "+desc);
+        List<Param> l=new ArrayList<>();int slot=isStatic?0:1,i=1;
+        while(i<desc.length()&&desc.charAt(i)!=')'){
+            int s=i;while(i<desc.length()&&desc.charAt(i)=='[')i++;if(i>=desc.length())throw new IOException("invalid method descriptor: "+desc);
+            char c=desc.charAt(i);if(c=='L'){i=desc.indexOf(';',i);if(i<0)throw new IOException("invalid method descriptor: "+desc);}i++;
+            char kind=i-s>1&&desc.charAt(s)=='['||c=='L'?'L':switch(c){case 'Z','B','C','S','I'->'I';case 'F'->'F';case 'J'->'J';case 'D'->'D';default->throw new IOException("invalid method descriptor: "+desc);};
+            l.add(new Param(slot,kind));slot+=kind=='J'||kind=='D'?2:1;
+        }
+        if(i>=desc.length())throw new IOException("invalid method descriptor: "+desc);
+        return l;
+    }
+    private static void load(ByteArrayOutputStream o,Param p)throws IOException{
+        int base="IJFDL".indexOf(p.kind());if(base<0)throw new IOException("unknown parameter kind "+p.kind());
+        if(p.slot()<=3)o.write(0x1a+4*base+p.slot());
+        else if(p.slot()<=255){o.write(0x15+base);o.write(p.slot());}
+        else{o.write(0xc4);o.write(0x15+base);o.write(p2(p.slot()));}
+    }
+    /** The length of the instruction at pc (code runs from s to e). */
+    private static int insnLen(byte[] c,int s,int pc,int e)throws IOException{
+        int op=u1(c,pc),len;
+        if(op==0xc4){if(pc+1>=e)throw new EOFException("truncated bytecode");len=u1(c,pc+1)==0x84?6:4;}
+        else if(op==0xaa){int p=pc+1+((4-((pc-s+1)&3))&3);if(p+12>e)throw new EOFException("truncated tableswitch");long lo=(int)u4(c,p+4),hi=(int)u4(c,p+8);len=(int)(p-pc+12+4*(hi-lo+1));}
+        else if(op==0xab){int p=pc+1+((4-((pc-s+1)&3))&3);if(p+8>e)throw new EOFException("truncated lookupswitch");len=p-pc+8+8*(int)u4(c,p+4);}
+        else if(op==0x10||op==0x12||(op>=0x15&&op<=0x19)||(op>=0x36&&op<=0x3a)||op==0xa9||op==0xbc)len=2;
+        else if(op==0x11||op==0x13||op==0x14||op==0x84||(op>=0x99&&op<=0xa8)||(op>=0xb2&&op<=0xb8)||op==0xbb||op==0xbd||op==0xc0||op==0xc1||op==0xc6||op==0xc7)len=3;
+        else if(op==0xc5)len=4;
+        else if(op==0xb9||op==0xba||op==0xc8||op==0xc9)len=5;
+        else len=1;
+        if(len<=0||pc+len>e)throw new IOException("invalid instruction at "+(pc-s));return len;
+    }
+    private static int countOpcode(byte[] c,int s,int e,int opcode)throws IOException{int n=0;for(int pc=s;pc<e;pc+=insnLen(c,s,pc,e))if(u1(c,pc)==opcode)n++;return n;}
+    private record EveryReturn(byte[] bytes,String moved,int returns,int oldCodeLen,int newCodeLen,int maxStack){}
+    private static EveryReturn patchEveryReturn(byte[] data,String method,String desc,String helperOwner,String helperMethod,String helperDesc,String argsCsv,String cast)throws IOException{
+        String what="returns: all";
+        if(method.equals("<init>")||method.equals("<clinit>"))throw new IOException(what+" can't hook "+method+desc+": a constructor or static initializer can't be moved into another method");
+        if(cast==null&&!desc.endsWith(")V"))throw new IOException(what+" with INSERT_BEFORE_FINAL_RETURN needs a void method, got: "+desc);
+        Cp cp=parseCp(data);int classAccess=u2(data,cp.end()),thisClass=u2(data,cp.end()+2);boolean iface=(classAccess&ACC_INTERFACE)!=0;
+        int o=cp.end()+6;int ic=u2(data,o);o+=2+2*ic;int fc=u2(data,o);o+=2;o=skipMembers(data,o,fc);int mcAt=o,mc=u2(data,o);o+=2;
+        Set<String> names=new HashSet<>();int mStart=-1,mEnd=-1,codeStart=-1,codeEnd=-1,descIdx=0,flags=0,matches=0;
+        for(int mi=0;mi<mc;mi++){
+            int ms=o,f=u2(data,o),ni=u2(data,o+2),di=u2(data,o+4);o+=6;int ac=u2(data,o);o+=2;String mn=cp.utf8()[ni],md=cp.utf8()[di];names.add(mn);
+            boolean hit=Objects.equals(mn,method)&&Objects.equals(md,desc);int cs=-1,ce=-1;
+            for(int ai=0;ai<ac;ai++){long al=u4(data,o+2);int end=o+6+(int)al;if(end>data.length)throw new EOFException("truncated method attribute");if(hit&&"Code".equals(cp.utf8()[u2(data,o)])){cs=o;ce=end;}o=end;}
+            if(hit){matches++;mStart=ms;mEnd=o;codeStart=cs;codeEnd=ce;descIdx=di;flags=f;}
+        }
+        if(matches!=1)throw new IOException("expected exactly one target method "+method+desc+", found "+matches);
+        if(codeStart<0||(flags&(ACC_ABSTRACT|ACC_NATIVE))!=0)throw new IOException(what+": "+method+desc+" has no code (abstract or native)");
+        boolean isStatic=(flags&ACC_STATIC)!=0;List<Param> ps=params(desc,isStatic);
+        int argc=0;
+        if(argsCsv!=null&&!argsCsv.isBlank())for(String raw:argsCsv.split(",")){
+            String t=raw.trim();argc++;
+            if(t.equals("this")){if(isStatic)throw new IOException(what+": the bridge loads this, but "+method+desc+" is static");continue;}
+            if(!t.startsWith("arg"))throw new IOException("unsupported bridge arg '"+t+"' (supported: this,arg1,arg2,...)");
+            int slot=Integer.parseInt(t.substring(3));
+            if(ps.stream().noneMatch(p->p.slot()==slot&&p.kind()=='L'))throw new IOException(what+": bridge arg "+t+" is not an object parameter of "+method+desc+"; with every return the bridge gets this and the parameters only");
+        }
+        int info=codeStart+6,oldCodeLen=(int)u4(data,info+4),cs=info+8,ce=cs+oldCodeLen;
+        int returns=countOpcode(data,cs,ce,cast==null?0xb1:0xb0);
+        String moved=null;for(int k=1;moved==null||names.contains(moved);k++)moved="bml$returns$"+method+(k==1?"":"$"+k);
+        CpAppend a=new CpAppend(cp.count());
+        int movedName=a.utf8(moved);int movedNat=a.nat(movedName,descIdx);int movedRef=iface?a.interfaceMethodRef(thisClass,movedNat):a.methodRef(thisClass,movedNat);
+        int bcls=a.clazz(a.utf8(helperOwner.replace('.','/')));int bridgeRef=a.methodRef(bcls,a.nat(a.utf8(helperMethod),a.utf8(helperDesc)));
+        int castRef=cast==null?0:a.clazz(a.utf8(cast));
+        if(a.next>0xffff)throw new IOException("constant pool overflow");
+        ByteArrayOutputStream code=new ByteArrayOutputStream();
+        if(!isStatic)code.write(0x2a);
+        for(Param p:ps)load(code,p);
+        code.write(isStatic?0xb8:0xb7);code.write(p2(movedRef));
+        code.write(loadOps(argsCsv));code.write(0xb8);code.write(p2(bridgeRef));
+        if(cast!=null){code.write(0xc0);code.write(p2(castRef));code.write(0xb0);}else code.write(0xb1);
+        int locals=(isStatic?0:1)+ps.stream().mapToInt(p->p.kind()=='J'||p.kind()=='D'?2:1).sum();
+        int maxStack=Math.max(locals,(cast==null?0:1)+argc);
+        byte[] wrapperCode=code.toByteArray();
+        byte[] codeInfo=concat(p2(maxStack),p2(locals),p4(wrapperCode.length),wrapperCode,p2(0),p2(0));
+        byte[] wrapper=concat(Arrays.copyOfRange(data,mStart,codeStart),p2(u2(data,codeStart)),p4(codeInfo.length),codeInfo,Arrays.copyOfRange(data,codeEnd,mEnd));
+        byte[] movedMethod=concat(p2(ACC_PRIVATE|ACC_SYNTHETIC|(flags&(ACC_STATIC|ACC_STRICT))),p2(movedName),p2(descIdx),p2(1),Arrays.copyOfRange(data,codeStart,codeEnd));
+        byte[] out=concat(Arrays.copyOfRange(data,0,8),p2(a.next),Arrays.copyOfRange(data,10,cp.end()),a.bytes.toByteArray(),Arrays.copyOfRange(data,cp.end(),mcAt),p2(mc+1),
+            Arrays.copyOfRange(data,mcAt+2,mStart),wrapper,movedMethod,Arrays.copyOfRange(data,mEnd,data.length));
+        return new EveryReturn(out,moved,returns,oldCodeLen,wrapperCode.length,maxStack);
+    }
+    private static void writeEveryReturn(Path out,byte[] original,String ownerLabel,String method,String desc,String helperOwner,String helperMethod,String helperDesc,String argsCsv,boolean wrap)throws Exception{
+        String cast=wrap?objectReturnInternal(desc):null;EveryReturn p=patchEveryReturn(original,method,desc,helperOwner,helperMethod,helperDesc,argsCsv,cast);
+        Files.createDirectories(out.toAbsolutePath().getParent());Files.write(out,p.bytes());
+        System.out.printf(Locale.ROOT,"PATCH_OK transform=%s returns=all owner=%s method=%s%s major=%d class_bytes=%d->%d returns_wrapped=%d body_moved_to=%s code=%d->%d max_stack=%d bridge=%s.%s%s args=%s%s%n",wrap?"WRAP_OBJECT_RETURN":"INSERT_BEFORE_FINAL_RETURN",ownerLabel,method,desc,u2(original,6),original.length,p.bytes().length,p.returns(),p.moved(),p.oldCodeLen(),p.newCodeLen(),p.maxStack(),helperOwner,helperMethod,helperDesc,argsCsv,wrap?" cast="+cast:"");
+    }
+
     private static byte[] readClassFromJar(Path jar,String owner)throws IOException{String entry=owner.replace('.','/').replace('\\','/')+".class";try(ZipFile z=new ZipFile(jar.toFile())){ZipEntry e=z.getEntry(entry);if(e==null)throw new FileNotFoundException("class not found in jar: "+entry);try(InputStream in=z.getInputStream(e)){return in.readAllBytes();}}}
 
     private static void writePatched(Path out,byte[] original,String ownerLabel,String method,String desc,String helperOwner,String helperMethod,String helperDesc,String argsCsv,boolean entry)throws Exception{
@@ -346,13 +446,24 @@ public final class SemanticModPreparer {
         writeWrapped(out,original,in.getFileName().toString(),a[3],a[4],a[5],a[6],a[7],argsCsv);
     }
 
+    /** patch-jar-final-all / patch-jar-wrap-object-all / patch-class-final-all / patch-class-wrap-object-all: every return, not only the final one. */
+    private static void patchEvery(String[] a)throws Exception{
+        boolean jar=a[0].startsWith("patch-jar-"),wrap=a[0].contains("wrap-object");int base=jar?9:8;
+        if(a.length!=base&&a.length!=base+1)throw new IllegalArgumentException(jar?"patch-jar-final-all|patch-jar-wrap-object-all <jar> <owner> <out.class> <method> <desc> <helperOwner> <helperMethod> <helperDesc> [argsCsv]"
+            :"patch-class-final-all|patch-class-wrap-object-all <in.class> <out.class> <method> <desc> <helperOwner> <helperMethod> <helperDesc> [argsCsv]");
+        String argsCsv=a.length==base+1?a[base]:"";
+        if(jar)writeEveryReturn(Path.of(a[3]),readClassFromJar(Path.of(a[1]),a[2]),a[2],a[4],a[5],a[6],a[7],a[8],argsCsv,wrap);
+        else{Path in=Path.of(a[1]);writeEveryReturn(Path.of(a[2]),Files.readAllBytes(in),in.getFileName().toString(),a[3],a[4],a[5],a[6],a[7],argsCsv,wrap);}
+    }
+
     public static void main(String[] args)throws Exception{
-        if(args.length==0){System.err.println("Commands: patch-jar-final|entry|wrap-object ... | patch-class-final|entry|wrap-object ...");System.exit(2);}
+        if(args.length==0){System.err.println("Commands: patch-jar-final|entry|wrap-object|final-all|wrap-object-all ... | patch-class-final|entry|wrap-object|final-all|wrap-object-all ...");System.exit(2);}
         switch(args[0]){
             case "patch-jar","patch-jar-final","patch-jar-entry"->patchJar(args);
             case "patch-class-final","patch-class-entry"->patchClass(args);
             case "patch-jar-wrap-object"->patchJarWrap(args);
             case "patch-class-wrap-object"->patchClassWrap(args);
+            case "patch-jar-final-all","patch-jar-wrap-object-all","patch-class-final-all","patch-class-wrap-object-all"->patchEvery(args);
             default->throw new IllegalArgumentException("unknown command: "+args[0]);
         }
     }

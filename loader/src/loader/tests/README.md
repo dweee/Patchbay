@@ -40,6 +40,13 @@ python3 loader/tests/smoke_java_preparer.py
 python3 loader/tests/smoke_transform_families.py
 ```
 
+`smoke_every_return.py` checks `"returns": "all"` on its own, against the
+install's `loader/tools/bitwig-mod-preparer.jar` (runs on Windows and Linux):
+
+```
+python3 loader/tests/smoke_every_return.py
+```
+
 The test runner has been executed on Linux. Windows runtime behaviour, native
 agent integration and cross-version live Bitwig compatibility are **not** proven
 by these tests. Do not classify synthetic patched-class execution as a Bitwig
