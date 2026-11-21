@@ -200,6 +200,12 @@
               "ADD_METHOD"
             ]
           },
+          "returns": {
+            "enum": [
+              "final",
+              "all"
+            ]
+          },
           "bridge": {
             "type": "object",
             "required": [
@@ -425,6 +431,23 @@
                 "method",
                 "body"
               ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "returns"
+              ]
+            },
+            "then": {
+              "properties": {
+                "transform": {
+                  "enum": [
+                    "INSERT_BEFORE_FINAL_RETURN",
+                    "WRAP_OBJECT_RETURN"
+                  ]
+                }
+              }
             }
           },
           {

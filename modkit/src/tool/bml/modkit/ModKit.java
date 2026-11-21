@@ -21,7 +21,7 @@ import java.util.Arrays;
  * </pre>
  */
 public final class ModKit {
-    public static final String VERSION = "0.1.0-dev.1";
+    public static final String VERSION = "0.1.0-dev.2";
 
     private ModKit() {
     }

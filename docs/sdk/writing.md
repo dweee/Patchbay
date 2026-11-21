@@ -61,7 +61,7 @@ Class names are written as in the jar: `dWb` for an obfuscated class, `com/bitwi
 4. To copy how a similar widget handles a modifier-click, find its builder the same way and look for what it registers on the button besides the model (an action per set of held modifier keys, for example), then `callers` on that registration method to see who else uses it.
 5. To change a widget, hook its builder: `ENTRY` + `WRAP_RETURN` on a static factory that returns the widget (`ENTRY` notes an argument in a `ThreadLocal`, `WRAP_RETURN` takes the widget), or `REPLACE_CALL` on the call that creates it inside a larger build method (call Bitwig's builder yourself, change the widget, return it).
 
-**Pitfall: actions you build yourself.** Bitwig's action class takes an action **ID**, not a label, and looks the name up in Bitwig's translation tables (`action.<id>.name`). An action made with your label as its ID shows the raw key (`SHIFT+CLICK action.My label.name` in the status bar) and logs `base-localization error: Localized text for key ... not found` every time it is shown. For an action that should be a Bitwig action (shortcut, Commander, menus), use the Actions and Menus framework, which names it correctly. For one you must build yourself (e.g. a click action on a widget), give it an ID of your own (`<mod_id>_...`) and make a small subclass of Bitwig's action class that overrides its protected name-lookup method to return your label: find the class with `javap` (its one-`String` constructor takes the ID; the protected method that returns a `String` and calls the translation lookup is the one to override). `exclusive-arm/src/.../ShiftArmAction.java` in the Mods repository is an example.
+**Pitfall: actions you build yourself.** Bitwig's action class takes an action **ID**, not a label, and looks the name up in Bitwig's translation tables (`action.<id>.name`). An action made with your label as its ID shows the raw key (`SHIFT+CLICK action.My label.name` in the status bar) and logs `base-localization error: Localized text for key ... not found` every time it is shown. For an action that should be a Bitwig action (shortcut, Commander, menus), use the Actions and Menus framework, which names it correctly. For a Shift-, Ctrl/Cmd- or Alt-click on one of Bitwig's buttons, named in the status bar hint, use the framework's `bml.actions.Clicks` (from 0.9.0-dev.1). For one you must build yourself (e.g. another kind of click action on a widget), give it an ID of your own (`<mod_id>_...`) and make a small subclass of Bitwig's action class that overrides its protected name-lookup method to return your label: find the class with `javap` (its one-`String` constructor takes the ID; the protected method that returns a `String` and calls the translation lookup is the one to override).
 
 An action ID string usually sits in a class that only declares actions: the ID is stored in a static field there. Run `callers` on that field to find where the action is bound to the code it runs.
 
@@ -108,14 +108,22 @@ public final class MyModHooks {
 | `at` | Runs | Hook parameters | Hook returns |
 |---|---|---|---|
 | `ENTRY` | before the method's first instruction | `@This` and/or `@Arg(n)` | `void` |
-| `BEFORE_RETURN` | just before the method's final return | `@This` / `@Arg(n)`, objects only | `void` |
-| `WRAP_RETURN` | on the value the method returns | `@Return` first; see the limitation below | the value to return instead (the method's type or `Object`) |
+| `BEFORE_RETURN` | just before the method's final return; with `allReturns = true`, before every return | `@This` / `@Arg(n)`, objects only | `void` |
+| `WRAP_RETURN` | on the value the method returns at its final return; with `allReturns = true`, at every return | `@Return` first; see the limitation below | the value to return instead (the method's type or `Object`) |
 | `REPLACE_CALL` | instead of one call inside the method | the call's receiver (unless the call is static), then its arguments, unannotated | what the call returns |
 | `OVERRIDE_AFTER_SUPER` | adds an override of an inherited method to `target`: Bitwig's method runs, then the hook | `@This` / `@Arg(n)` | `void` |
 | `OVERRIDE_BEFORE_SUPER` | a new override: the hook, then Bitwig's method | `@This` / `@Arg(n)` | `void` |
 | `OVERRIDE_INSTEAD` | a new override: only the hook | `@This` / `@Arg(n)` | exactly the overridden method's type |
 
 - `@This` receives the object the method runs on; `@Arg(n)` the target method's parameter `n`, counting from 0. A parameter's type must accept the value: the same type, a supertype, or `Object`. At `ENTRY`, a primitive parameter (`boolean`, `int`, `double`, ...) is taken with the same primitive type (`@Arg(1) int index`); `BEFORE_RETURN` and `WRAP_RETURN` take objects only.
+- The final return is the last return instruction in the method's bytecode. A method that returns early from a branch (a guard clause, a `switch` case) leaves there without running a `BEFORE_RETURN` or `WRAP_RETURN` hook, so check the target with `javap -c` and count its `return` / `areturn` lines. When there is more than one and the hook must see them all (a label returned from several branches, say), add `allReturns = true`:
+
+```java
+@Hook(target = abc.class, method = "label", at = At.WRAP_RETURN, allReturns = true)
+public static String label(@Return String label, @This abc button) { ... }
+```
+
+With `allReturns`, `@This` and `@Arg(n)` are the object and the parameters the method was called with, even if the method assigns a parameter before it returns. It can't hook a constructor or static initializer. Stack traces through the method show it twice: the method, and its original body as `bml$returns$<name>`.
 - `REPLACE_CALL` names the call with `callOwner` (the class in the call instruction), `call` (the called method's name, or name and descriptor) and `occurrence` (which matching call in the target method, counting from 1 in Bitwig's original method):
 
 ```java
@@ -127,7 +135,7 @@ public static ghi addOwnRow(def menu, String label) { ... }
 Limitations:
 
 - Each call can be replaced by one hook in a mod. Other mods' hooks don't change your `occurrence`. If another mod replaces the same call, preparation stops and names both hooks and the method, unless the two can be chained (`loader/MANIFEST-FORMAT.md`, `REPLACE_INVOKE`).
-- `WRAP_RETURN`: take only `@Return`. `@This` and `@Arg` are read at the return, where Bitwig's code may no longer hold them, and the class then fails verification (`Bad local variable type`, reported by the offline check). When you need an argument, note it with an `ENTRY` hook on the same method and keep it in a field.
+- `WRAP_RETURN`: take only `@Return`. `@This` and `@Arg` are read at the return, where Bitwig's code may no longer hold them, and the class then fails verification (`Bad local variable type`, reported by the offline check). When you need an argument, note it with an `ENTRY` hook on the same method and keep it in a field. With `allReturns = true` this doesn't apply: the hook runs where the method's object and parameters are always held.
 - Keep hooks short and catch exceptions: a hook runs on whatever thread calls the Bitwig method, and an exception thrown from a hook reaches Bitwig's code. Assume any thread: make state shared between a hook and other code (a framework's callbacks run on Bitwig's UI thread) `volatile` or otherwise thread-safe.
 - A hook that calls Bitwig methods may come back through itself (a hook on a setter that calls the same setter on other objects). Make sure that second pass does nothing: return early on the case you cause, or guard with a `ThreadLocal<Boolean>`.
 - A hook that needs a primitive argument must run at `ENTRY`.

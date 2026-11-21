@@ -62,4 +62,13 @@ public @interface Hook {
      * the calls appear in the target method.
      */
     int occurrence() default 1;
+
+    /**
+     * {@link At#BEFORE_RETURN} and {@link At#WRAP_RETURN} only. By default the hook runs at the
+     * method's final return instruction only, the last one in its bytecode; a method that returns
+     * early from a branch returns there without the hook. {@code true} runs it at every return.
+     * Then {@link This} and {@link Arg} are the object and parameters the method was called with.
+     * Not for constructors or static initializers.
+     */
+    boolean allReturns() default false;
 }

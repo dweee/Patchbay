@@ -24,6 +24,7 @@ import bitwig.obf.dLh; // a dropdown button
 import bitwig.obf.dpN; // Bitwig's application
 import bitwig.obf.dsp; // a menu model
 import bitwig.obf.dve; // a widget
+import bitwig.obf.dzk; // a button's click for one set of modifiers, with its status bar hint
 import bitwig.obf.eoV; // an input event
 import bitwig.obf.jsd; // a device
 import bitwig.obf.uN3; // a model object
@@ -244,6 +245,34 @@ public final class FrameworkHooks {
             Registry.LOG.log("Play menu failed", t);
         } finally {
             Toolbars.done();
+        }
+    }
+
+    /**
+     * A button's status bar hint entry for one set of modifiers is being read (dzk wraps the button's
+     * click for those modifiers: its own, or Bitwig's default for a set with no click of its own).
+     */
+    @Hook(target = dzk.class, method = "cfM(DDLeoV;)Ljava/lang/String;", at = At.ENTRY, id = "button-click-hint-start")
+    public static void buttonClickHintStarts(@This dzk entry) {
+        try {
+            ModifierClicks.hintStarts(entry.MRY, entry.IwV); // its button and its click
+        } catch (Throwable t) {
+            Registry.LOG.log("click hint failed", t);
+        }
+    }
+
+    /**
+     * The entry's text, as the click gave it. This is the method's final return, the one every click
+     * that isn't a {@code dza} takes (Bitwig's default click among them); WRAP_RETURN wraps only the
+     * final return.
+     */
+    @Hook(target = dzk.class, method = "cfM(DDLeoV;)Ljava/lang/String;", at = At.WRAP_RETURN, id = "button-click-hint")
+    public static String buttonClickHint(@Return String hint) {
+        try {
+            return ModifierClicks.defaultHint(hint);
+        } catch (Throwable t) {
+            Registry.LOG.log("click hint failed", t);
+            return hint;
         }
     }
 
