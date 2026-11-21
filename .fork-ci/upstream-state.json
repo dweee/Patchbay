@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "upstream": "shaboogen-dev/Patchbay",
+  "branch": "2dd780331657a2ef41c326143e8c8a7c836c5cd4",
   "track": "branch",
-  "branch": "b3c88526599eb680dee25050070cbcaa38b3eab1"
+  "upstream": "shaboogen-dev/Patchbay",
+  "version": 1
 }
