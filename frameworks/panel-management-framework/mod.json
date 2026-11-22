@@ -4,7 +4,7 @@
     "id": "panel-management-framework",
     "name": "Framework: Panels",
     "area": "Framework",
-    "version": "0.2.0-dev.2",
+    "version": "0.3.0-dev.6",
     "author": "shaboogen",
     "description": "Lets mods add their own panels to Bitwig's layout, each with a button, a Show action and a scale, and lets mods arrange and scale Bitwig's own panels",
     "documentation": "readme"
@@ -14,6 +14,10 @@
     "platform": "windows",
     "architecture": "x64"
   },
+  "requires": [
+    { "id": "action-menu-composition-framework", "min_version": "0.8.0-dev.1" },
+    { "id": "preferences-composition-framework", "min_version": "1.0.0" }
+  ],
   "resources": {
     "readme": {
       "kind": "file",
