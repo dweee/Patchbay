@@ -27,8 +27,10 @@ import bitwig.obf.qH; // a browser configuration
 import bitwig.obf.sO; // a device-like result
 import bitwig.obf.tz; // a list filter
 import bitwig.obf.wz; // a browser session, as a result model provider
+import com.bitwig.flt.document.core.iface.pHd; // a document (a project)
 import com.bitwig.flt.document.core.master.file_preview.hgq; // the cue player
 
+import bml.api.Arg;
 import bml.api.At;
 import bml.api.Hook;
 import bml.api.Return;
@@ -307,12 +309,26 @@ public final class BrowserHooks {
         splitter.MRY(Slots.results(column));
     }
 
-    /** The search field is padded for its row: with the All Sources button, the button and the field side by side are. */
+    /**
+     * The search field is padded for its row: with the All Sources button, the button and the field
+     * side by side are; with a view's search-row slot, what the view returns, or an empty row, hidden.
+     */
     @Hook(target = cFV.class, method = SIDE_LAYOUT, at = At.REPLACE_CALL, callOwner = dnF.class, call = "cfM(Ldve;IIII)LdnF;",
           id = "search-row")
     public static dnF padSearchRow(dve search, int left, int right, int top, int bottom) {
-        dve row = SideBrowsers.searchRow(search);
-        return dnF.cfM(row, row == search ? left : SideBrowsers.ROW_INSET, right, top, bottom);
+        dve row;
+        try {
+            row = Slots.searchRow(search);
+        } catch (Throwable t) {
+            State.LOG.log("placing the search row failed; the search field is shown alone", t);
+            row = search;
+        }
+        if (row == null) { // the view placed the field itself: an empty row, hidden, so the layout closes the gap
+            dnF empty = dnF.cfM(dWb.cfM(0, new dve[0]), left, right, top, bottom);
+            empty.t_(false);
+            return empty;
+        }
+        return dnF.cfM(row, SideBrowsers.isButtonRow(row) ? SideBrowsers.ROW_INSET : left, right, top, bottom);
     }
 
     /** The source header, built by the side browser's own method. */
@@ -341,32 +357,48 @@ public final class BrowserHooks {
         return filters;
     }
 
-    /** The details pane under the results, built by the side browser's own method. */
+    /** The details pane under the results, built by the side browser's own method: with a view's details slot, what the view returns. */
     @Hook(target = cFV.class, method = SIDE_LAYOUT, at = At.REPLACE_CALL, callOwner = cFV.class, call = "DNo()Ldve;",
           id = "note-details-pane")
     public static dve addDetails(cFV browser) {
         dve details = browser.DNo(); // the details pane
+        dve placed;
         try {
-            SideBrowsers.detailsAdded(details);
+            placed = Slots.details(browser, details);
+        } catch (Throwable t) {
+            State.LOG.log("placing the details pane failed; it is placed as Bitwig's", t);
+            placed = details;
+        }
+        try {
+            SideBrowsers.detailsAdded(placed);
         } catch (Throwable t) {
             State.LOG.log("noting the details pane failed", t);
         }
-        return details;
+        return placed;
     }
 
-    /** The side browser starts laying out its rows. */
+    /**
+     * The side browser starts laying out its rows, before its first read of the session (the results
+     * list, next): with a view's setup, the view sets up for this side browser.
+     */
     @Hook(target = cFV.class, method = SIDE_LAYOUT, at = At.ENTRY, id = "side-browser-starts")
-    public static void sideBrowserStarts(@This cFV browser) {
+    public static void sideBrowserStarts(@This cFV browser, @Arg(0) pHd document, @Arg(1) Jp session) {
         try {
             SideBrowsers.starts(browser);
         } catch (Throwable t) {
             State.LOG.log("noting a side browser failed", t);
+        }
+        try {
+            Instances.starts(browser, document, session);
+        } catch (Throwable t) {
+            State.LOG.log("setting up a view for a side browser failed", t);
         }
     }
 
     /** The side browser is built. Bitwig's frame keeps no locals at this return, so the browser comes from the entry. */
     @Hook(target = cFV.class, method = SIDE_LAYOUT, at = At.BEFORE_RETURN, id = "side-browser-built")
     public static void sideBrowserBuilt() {
+        Instances.built();
         try {
             SideBrowsers.built();
         } catch (Throwable t) {
@@ -391,6 +423,7 @@ public final class BrowserHooks {
         try {
             Contents.disposed(browser);
             Slots.disposed(browser);
+            Instances.disposed(browser);
         } catch (Throwable t) {
             State.LOG.log("disposing a view's content failed", t);
         }
