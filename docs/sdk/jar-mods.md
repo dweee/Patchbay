@@ -10,7 +10,7 @@ For mods made by changing Bitwig's `bitwig.jar` itself: classes edited, classes 
 | One build per Bitwig version (and per platform); the diff applies only to the exact official jar. | One source, written against Bitwig 6.1.4's names on any one platform; BML's map packs translate it to 6.0–6.1.4 on Windows, macOS and Linux. |
 | Two jar mods can't be combined: whichever jar is installed wins. | Mods compose: several mods may hook the same Bitwig method; they're applied together. |
 | All features in one patch. | Each feature can be its own mod; users enable each one in the Patchbay window. |
-| Edits anywhere in a method. | Edits are hooks at defined points: method start, before the final return, on the return value, instead of one call, or a new override. Mid-method edits become a hook on a nearby call. |
+| Edits anywhere in a method. | Edits are hooks at defined points: method start, before the final return (or every return), on the return value, instead of one call, or a new override. Mid-method edits become a hook on a nearby call. |
 | Widened access by editing flags. | The mod kit lists the non-public members the helper uses; BML opens exactly those. |
 | Menus, settings, inspector panels built by patching Bitwig's builders. | Use the frameworks ([frameworks.md](frameworks.md)): actions and menu items, Settings controls, Inspector blocks, themes and native devices, without hooks of your own. Don't port these patches as hooks. |
 

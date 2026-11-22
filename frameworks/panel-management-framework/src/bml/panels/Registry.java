@@ -29,6 +29,8 @@ final class Registry {
         String icon; // the icon name Bitwig loads (resolved by Icons); null for a Bitwig view without one
         Function<ViewContext, Object> content;
         String replaces;           // a Bitwig panel it can take the place of ("mixer"), or null
+        String side;               // a place outside the main area ("browser", View.side), or null
+        boolean sideColumn;        // with a side: a column of its own beside it (View.sideColumn)
         Class<?> panelClass;       // a Bitwig panel matched by class (Panels.bitwigPanel): its class
         final Map<String, String> savedTexts = new LinkedHashMap<>(); // key → default
         boolean scalable = true;
@@ -96,6 +98,19 @@ final class Registry {
         public View replaces(String bitwigPanel) {
             if ("mixer".equals(bitwigPanel)) d.replaces = bitwigPanel;
             else LOG.log("view " + d.who() + ": it can't replace " + bitwigPanel + " (only \"mixer\"); ignored");
+            return this;
+        }
+
+        @Override
+        public View side(String place) {
+            if ("browser".equals(place)) d.side = place;
+            else LOG.log("view " + d.who() + ": no side " + place + " (only \"browser\"); ignored");
+            return this;
+        }
+
+        @Override
+        public View sideColumn(boolean column) {
+            d.sideColumn = column;
             return this;
         }
 
@@ -210,6 +225,20 @@ final class Registry {
         return views;
     }
 
+    /** The mods' own views for the main area (no side), in their order. */
+    static List<Declared> mainViews() {
+        List<Declared> main = new ArrayList<>();
+        for (Declared v : views()) if (v.side == null) main.add(v);
+        return main;
+    }
+
+    /** The mods' own views on a side ("browser"), in their order. */
+    static List<Declared> sideViews(String side) {
+        List<Declared> found = new ArrayList<>();
+        for (Declared v : views()) if (side.equals(v.side)) found.add(v);
+        return found;
+    }
+
     /** The Bitwig views layout mods declared, in declaration order. */
     static synchronized List<Declared> bitwigViews() {
         load();
@@ -282,6 +311,14 @@ final class Registry {
             }
             Set<String> ids = new HashSet<>();
             for (Declared v : d.views) {
+                if (v.sideColumn && v.side == null) {
+                    LOG.log("view " + v.who() + ": sideColumn needs a side; it goes in the main area");
+                    v.sideColumn = false;
+                }
+                if (v.side != null && v.replaces != null) {
+                    LOG.log("view " + v.who() + ": a view on a side replaces no panel; replaces ignored");
+                    v.replaces = null;
+                }
                 if (v.id == null || !v.id.matches(ID)) LOG.log("view " + v.who() + ": invalid ID; skipped");
                 else if (!ids.add(v.id)) LOG.log("view " + v.who() + ": the mod already declared that ID; skipped");
                 else if (v.label == null || v.label.isBlank()) LOG.log("view " + v.who() + " has no label; skipped");

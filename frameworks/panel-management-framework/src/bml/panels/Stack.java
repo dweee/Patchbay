@@ -46,8 +46,11 @@ import com.bitwig.flt.document_view_settings.gJi; // a project's view settings f
  * Every view's path is flat under the stack and every split below the first is named by the view
  * above it (StackSplit), so saved values stay with their views whichever views the stack has.
  *
- * Side columns (Layout.sideColumns) hold only the Bitwig panels a policy names, side by side at
- * a side of the window, each a full-height column with its own width:
+ * Side columns (Layout.sideColumns) hold the Bitwig panels a policy names, side by side at a side
+ * of the window, each a full-height column with its own width; when they hold the Browser panel,
+ * the mods' browser-side views join them after those panels (addColumns). Side columns can also sit
+ * beside a part Bitwig's splitter keeps (besideEdge: a column view beside the browser side's tab
+ * group); then that part is at the edge and Bitwig's splitter stays Bitwig's:
  *
  * <pre>
  * Bitwig's splitter (its saved width: the first panel's)
@@ -63,6 +66,7 @@ import com.bitwig.flt.document_view_settings.gJi; // a project's view settings f
  * hiding it gives that back. The panels keep Bitwig's own buttons where Bitwig puts them, given
  * the same clicks (the side-buttons hook), and the columns may all be hidden: a click on the panel
  * shown alone hides it, the last panel can be taken out, and a project may open with none shown.
+ * When a policy moves the edge to the other side of the window, settle moves every column with it.
  */
 final class Stack {
     /** A view of the stack: its declaration, its node, the policy mod that made the stack. */
@@ -79,8 +83,10 @@ final class Stack {
     final boolean side; // side columns: Bitwig's buttons, may be empty
     final List<Entry> entries;
     final List<StackSplit> splits = new ArrayList<>(); // the main stack's
-    final List<akZ> columns = new ArrayList<>();       // side columns: each panel's splitter, in the panels' order
+    final List<akZ> columns = new ArrayList<>();       // side columns: the splitters they own, from the edge inwards
     akw root;
+    akZ outer; // side columns: Bitwig's splitter holding them
+    akw edge;  // side columns: the part at the window's edge (the first column, or a part the columns sit beside)
 
     /**
      * A column's width (pixels at Bitwig's scale) until it is first opened: Bitwig's default for
@@ -94,7 +100,7 @@ final class Stack {
         this.layout = layout;
         this.name = name;
         this.side = side;
-        this.entries = List.copyOf(entries);
+        this.entries = new ArrayList<>(entries); // side columns can be joined (addColumns)
     }
 
     /**
@@ -103,30 +109,122 @@ final class Stack {
      * around what it held (the main area). Every splitter keeps its column's width.
      */
     static Stack buildColumns(Layouts layout, akZ outer, akw replaced, List<Entry> entries) {
-        Stack stack = new Stack(layout, outer.tSS(), true, entries);
-        boolean edgeSecond = outer.wGc() == replaced; // wGc(): the second (right) part
-        akw inner = edgeSecond ? outer.E3() : outer.wGc();
-        outer.MRY((akw) akq.cfM("panel-stand-in")); // takes both parts out (a part has one parent)
-        outer.IwV((akw) akq.cfM("panel-stand-in"));
-        akw core = inner;
-        List<akZ> nested = new ArrayList<>();
-        for (int i = entries.size() - 1; i >= 1; i--) { // from the main area outwards
-            akw panel = entries.get(i).node();
-            ColumnSplit split = ColumnSplit.create(outer, panel);
-            split.MRY(edgeSecond ? core : panel); // the first (left) part
-            split.IwV(edgeSecond ? panel : core); // the second (right) part
-            split.cfM(edgeSecond ? dVx.MRY : dVx.cfM); // the column's side keeps its width
-            split.cfM(COLUMN_WIDTH);
-            nested.add(0, split);
-            core = split;
-        }
+        Stack stack = new Stack(layout, outer.tSS(), true, List.of(entries.get(0)));
         akw edge = entries.get(0).node();
-        outer.MRY(edgeSecond ? core : edge);
-        outer.IwV(edgeSecond ? edge : core);
-        stack.columns.add(outer);
-        stack.columns.addAll(nested);
+        if (outer.wGc() == replaced) outer.IwV(edge); // wGc(): the second (right) part
+        else outer.MRY(edge);
+        stack.outer = outer;
+        stack.edge = edge;
+        stack.columns.add(outer); // its width: the first column's
+        stack.root = outer;
+        stack.addColumns(entries.subList(1, entries.size()));
+        return stack;
+    }
+
+    /**
+     * Side columns beside a part of Bitwig's left/right splitter that stays as it is (the browser
+     * side's tab group), towards the splitter's other part (the main area); none yet (addColumns).
+     * Bitwig's splitter stays Bitwig's: its strip and width are the part's.
+     */
+    static Stack besideEdge(Layouts layout, akZ outer, akw edge) {
+        Stack stack = new Stack(layout, outer.tSS(), true, List.of());
+        stack.outer = outer;
+        stack.edge = edge;
         stack.root = outer;
         return stack;
+    }
+
+    /**
+     * More side columns, after the ones there are (towards the main area), in this order: each
+     * innermost column's splitter gets a new one around what it held towards the main area, named
+     * by its panel (ColumnSplit), so the main area keeps its path and each column its saved width.
+     */
+    void addColumns(List<Entry> more) {
+        boolean edgeFirst = outer.E3() == edge; // E3(): the first (left) part
+        for (Entry entry : more) {
+            akZ container = columns.isEmpty() ? outer : columns.get(columns.size() - 1);
+            akw inner = container instanceof ColumnSplit split ? split.core()
+                      : container.E3() == edge ? container.wGc() : container.E3();
+            boolean innerFirst = container.E3() == inner;
+            if (innerFirst) container.MRY((akw) akq.cfM("panel-stand-in")); // takes it out (a part has one parent)
+            else container.IwV((akw) akq.cfM("panel-stand-in"));
+            akw panel = entry.node();
+            ColumnSplit split = ColumnSplit.create(outer, panel);
+            split.MRY(edgeFirst ? panel : inner); // the first (left) part
+            split.IwV(edgeFirst ? inner : panel); // the second (right) part
+            split.cfM(edgeFirst ? dVx.cfM : dVx.MRY); // the column's side keeps its width
+            split.cfM(COLUMN_WIDTH);
+            if (innerFirst) container.MRY(split);
+            else container.IwV(split);
+            columns.add(split);
+            entries.add(entry);
+        }
+    }
+
+    /**
+     * Side columns: every column on the side of the window's edge, whichever side of Bitwig's
+     * splitter the edge is on now (a layout mod may move it: Panel: Choose Sides swaps the
+     * splitters it knows, not the mods' columns). Nothing when they already are.
+     */
+    void settle() {
+        if (!side || outer == null) return;
+        boolean edgeFirst;
+        if (outer.E3() == edge) edgeFirst = true;
+        else if (outer.wGc() == edge) edgeFirst = false;
+        else return; // the edge isn't where the columns were built: left as it is
+        for (akZ split : columns) if (split instanceof ColumnSplit column) column.settle(edgeFirst);
+    }
+
+    /** Whether the side columns' edge is on the left of Bitwig's splitter (so their buttons go in the left group). */
+    boolean edgeOnLeft() {
+        return outer != null && outer.E3() == edge;
+    }
+
+    /**
+     * The first of the mods' columns (not Bitwig's panels) in the bottom bar's order, which follows
+     * the columns on screen: with the edge on the left, the one nearest the edge; on the right, the
+     * one nearest the main area. Null when the columns hold no mod's view.
+     */
+    akQ firstModButton() {
+        boolean left = edgeOnLeft();
+        akQ first = null;
+        for (Entry entry : entries) {
+            if (!(entry.node() instanceof ViewNode)) continue;
+            if (left) return entry.node();
+            first = entry.node();
+        }
+        return first;
+    }
+
+    /** Side columns: every splitter of theirs from the window's edge inwards, Bitwig's outer one first. */
+    List<akZ> splittersFromEdge() {
+        List<akZ> all = new ArrayList<>();
+        if (outer != null) all.add(outer);
+        for (akZ split : columns) if (split != outer) all.add(split);
+        return all;
+    }
+
+    /** The column a splitter of theirs holds: the edge in Bitwig's outer one, else its own; null for none. */
+    akw columnOf(akZ splitter) {
+        if (splitter == outer) return edge;
+        return splitter instanceof ColumnSplit split ? split.column() : null;
+    }
+
+    /**
+     * Side columns: the part their innermost splitter holds towards the main area (the main area,
+     * with whatever Bitwig had beside it there), or null when there are no columns of theirs.
+     */
+    akw mainCore() {
+        if (columns.isEmpty()) return null;
+        akZ innermost = columns.get(columns.size() - 1);
+        if (innermost instanceof ColumnSplit split) return split.core();
+        if (innermost == outer) return outer.E3() == edge ? outer.wGc() : outer.E3();
+        return null;
+    }
+
+    /** The edge part (for the columns' buttons' side: the same group as its buttons). */
+    akw edgePart() {
+        return edge;
     }
 
     static Stack build(Layouts layout, String name, boolean side, List<Entry> entries) {
@@ -278,10 +376,11 @@ final class Stack {
      * width; one with a width of its own keeps it. Once per view settings.
      */
     void watch(gJi settings) {
-        if (!side || settings == null || columns.size() < 2 || !watched.add(settings)) return;
-        for (int i = 1; i < entries.size() && i < columns.size(); i++) {
-            AQw shown = entries.get(i).node().cfM(settings);
-            mcu width = columns.get(i).cfM(settings); // its saved divider position: the column's width
+        if (!side || settings == null || outer == null || !watched.add(settings)) return;
+        for (Entry entry : entries) {
+            ColumnSplit split = splitOf(entry);
+            AQw shown = entry.node().cfM(settings);
+            mcu width = split != null ? split.cfM(settings) : null; // its saved divider position: the column's width
             if (shown == null || width == null) continue;
             shown.addListener((foz) event -> {
                 try {
@@ -293,9 +392,15 @@ final class Stack {
         }
     }
 
+    /** The column splitter of an entry (not the edge's, which is Bitwig's), or null. */
+    private ColumnSplit splitOf(Entry entry) {
+        for (akZ split : columns) if (split instanceof ColumnSplit column && column.column() == entry.node()) return column;
+        return null;
+    }
+
     private void startWidth(gJi settings, mcu width) {
         if (Math.abs(width.getDoubleValue() - COLUMN_WIDTH) > 0.5) return; // a width of its own
-        mcu first = columns.get(0).cfM(settings);
+        mcu first = outer.cfM(settings); // Bitwig's splitter: the edge's width
         if (first != null) width.setDoubleValue(first.getDoubleValue());
     }
 

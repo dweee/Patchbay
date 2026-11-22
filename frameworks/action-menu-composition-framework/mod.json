@@ -4,9 +4,9 @@
     "id": "action-menu-composition-framework",
     "name": "Framework: Actions and Menus",
     "area": "Framework",
-    "version": "0.8.0-dev.1",
+    "version": "0.9.0-dev.4",
     "author": "shaboogen",
-    "description": "Lets mods add their own actions to Bitwig, with shortcuts and Commander entries, and place them, or Bitwig's own actions, in Bitwig's menus.",
+    "description": "Lets mods add their own actions to Bitwig, with shortcuts and Commander entries, and place them, or Bitwig's own actions, in Bitwig's menus",
     "documentation": "readme"
   },
   "built_against": {

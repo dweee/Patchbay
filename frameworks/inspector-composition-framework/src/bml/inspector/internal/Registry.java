@@ -130,7 +130,6 @@ final class Registry {
     private static List<Declared> blocks = List.of();
     private static List<Rows> rows = List.of();
     private static List<Listener> listeners = List.of();
-    private static boolean trackBlocks;
     private static boolean loaded;
 
     private Registry() {
@@ -152,12 +151,6 @@ final class Registry {
     static synchronized List<Listener> listeners() {
         load();
         return listeners;
-    }
-
-    /** Whether any mod adds a block to the Track Inspector. */
-    static synchronized boolean trackBlocks() {
-        load();
-        return trackBlocks;
     }
 
     /** Asks every registered provider for its blocks. Once. */
@@ -207,7 +200,6 @@ final class Registry {
         blocks = List.copyOf(allBlocks);
         rows = List.copyOf(allRows); // registrations come ordered by mod ID, then registration ID
         listeners = List.copyOf(allListeners); // the same order
-        trackBlocks = blocks.stream().anyMatch(b -> b.contexts.contains(Context.TRACK));
         LOG.log("blocks: " + blocks.size() + ", device rows: " + rows.size() + ", block listeners: " + listeners.size());
     }
 }

@@ -34,6 +34,12 @@ public interface Panel {
     /** Bitwig's side browser this panel belongs to (a {@code cFV}, as the mod kit names it). */
     Object browser();
 
+    /** The document the side browser belongs to (a {@code pHd}). */
+    Object document();
+
+    /** What the view's {@link View#setup setup} returned for this side browser, or null. */
+    Object handle();
+
     /**
      * A map for the view's own state, the same object for every panel of the same project while the
      * project is open, so state survives the windows being rebuilt. Keep plain values in it, not

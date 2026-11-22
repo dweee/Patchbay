@@ -26,8 +26,6 @@ import bitwig.obf.dWb; // a vertical or horizontal group of widgets
 import bitwig.obf.dnF; // a framed widget
 import bitwig.obf.dvW; // a widget's base: children and visibility
 import bitwig.obf.dve; // a widget
-import bitwig.obf.kbG; // the selection an Inspector panel shows
-import bitwig.obf.svm; // a size policy
 import bitwig.obf.vjp; // a fixed text value
 import bml.inspector.BlockContext;
 import bml.inspector.BuiltBlock;
@@ -35,22 +33,11 @@ import bml.inspector.Context;
 
 /** What the framework does while Bitwig builds an Inspector panel. */
 final class Panels {
-    /**
-     * Minimum height of Bitwig's track block (all track types) while one track is selected and a mod adds a block to
-     * the Track Inspector, so Bitwig's block doesn't shrink until it looks wrong when it shares the Inspector: at 1256
-     * the block and its fader keep the same size whichever track type is selected. With several tracks selected the
-     * block shows Bitwig's shared rows (no fader) and keeps its own height; with its body hidden it keeps its own
-     * height too.
-     */
-    static final long TRACK_MINIMUM_HEIGHT = 1256;
-
     /** One panel being built. */
     private static final class Build {
         final aLZ panel;
         final Context context;
         final List<NativeBlock> nativeBlocks = new ArrayList<>();
-        /** Bitwig's track block as its builder filled it: header first, then the body. */
-        dvW trackGroup;
 
         Build(aLZ panel) {
             this.panel = panel;
@@ -118,17 +105,10 @@ final class Panels {
         BUILD.remove();
     }
 
-    /** After Bitwig built the panel's body: the track minimum, then the mods' blocks. */
+    /** After Bitwig built the panel's body: the mods' blocks. */
     static void bodyBuilt(aLZ panel, dWb parent) {
         Build build = BUILD.get();
         if (build == null || build.panel != panel || build.context == null) return;
-        if (build.context == Context.TRACK && Registry.trackBlocks()) {
-            try {
-                applyTrackMinimum(build, parent);
-            } catch (Throwable t) {
-                report("track-minimum", "track block minimum height failed", t);
-            }
-        }
         addBlocks(build, parent);
     }
 
@@ -138,17 +118,13 @@ final class Panels {
         SECTIONS.get().push(new Section(panel, title == null ? "" : String.valueOf(title.getValue())));
     }
 
-    /** Bitwig's block builder filled a block's body: tell the listeners, and note Bitwig's track block. */
+    /** Bitwig's block builder filled a block's body: tell the listeners. */
     static void sectionFilled(Object body) {
         ArrayDeque<Section> stack = SECTIONS.get();
         if (stack.isEmpty() || !(body instanceof dvW group)) return;
         Section section = stack.peek();
         OwnBlock own = OWN_BLOCK.get();
-        if (own == null) {
-            Build build = BUILD.get();
-            if (build != null && build.panel == section.panel && build.context == Context.TRACK && stack.size() == 1)
-                build.trackGroup = group;
-        } else if (!own.built) {
+        if (own != null && !own.built) {
             return; // its content failed: the block isn't shown
         }
         List<Registry.Listener> listeners = Registry.listeners();
@@ -173,53 +149,6 @@ final class Panels {
         if (build != null && build.panel == section.panel && block != null && OWN_BLOCK.get() == null)
             build.nativeBlocks.add(new NativeBlock(section.title, block));
         if (stack.isEmpty()) SECTIONS.remove();
-    }
-
-    /**
-     * Raises the three lengths of the track block's own height policy (minimum, preferred, maximum) to at least the
-     * minimum while one track is selected and the block's body is shown. Its widgets stay as Bitwig built them.
-     *
-     * <p>The Track Inspector is one panel for one track and for several: the block's title follows the selection
-     * ("TRACKS (2)") and Bitwig swaps the rows below it when the selection changes (one track's rows, or the shared
-     * rows when the selection holds several, {@code kbG.zpW()}), without building the panel again. So the selection,
-     * and whether the body is hidden, are asked at every layout, not once.
-     */
-    private static void applyTrackMinimum(Build build, dWb parent) {
-        List<?> contents = parent.jm_();
-        if (contents.size() != 1 || !(contents.get(0) instanceof dve block)) return;
-        svm original = block.jI_(); // its height policy
-        if (original == null) return;
-        dvW group = build.trackGroup;
-        kbG selection = build.panel.vpw();
-        block.MRY(new MinimumHeight(original, TRACK_MINIMUM_HEIGHT,
-                () -> bodyHidden(group) || severalSelected(selection)));
-    }
-
-    /** Whether every widget below the block's header is hidden (by any mod); false if the block isn't known. */
-    private static boolean bodyHidden(dvW group) {
-        if (group == null) return false;
-        try {
-            List<?> children = group.jm_();
-            if (children.size() < 2) return false;
-            for (Object child : children.subList(1, children.size())) {
-                if (!(child instanceof dvW widget) || widget.uev()) return false; // shown
-            }
-            return true;
-        } catch (Throwable t) {
-            report("track-body", "reading the track block's body failed; the track minimum stays", t);
-            return false;
-        }
-    }
-
-    /** Whether the selection holds several tracks; on a failure, false (the minimum stays, as before). */
-    private static boolean severalSelected(kbG selection) {
-        if (selection == null) return false;
-        try {
-            return selection.zpW();
-        } catch (Throwable t) {
-            report("track-selection", "reading the track selection failed; the track minimum stays", t);
-            return false;
-        }
     }
 
     // ---- the mods' blocks ----------------------------------------------------------------------

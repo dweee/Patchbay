@@ -37,6 +37,32 @@ public interface View {
      */
     View results(ResultsFactory factory);
 
+    /**
+     * While active, {@code factory} runs at the start of each side browser's build, before the side
+     * browser reads its session for the first time, with the browser, its document and its session.
+     * What it returns is the view's handle for that side browser: its slots and panel give it back as
+     * {@code handle()}. A factory that throws makes the view's claims lapse (logged) and the side
+     * browser is built as Bitwig builds it.
+     */
+    View setup(SetupFactory factory);
+
+    /**
+     * While active, the side browser's search field goes where the view puts it: {@code factory} gets
+     * the field after the results slot and returns what goes in the search row (the field, the row
+     * the framework would build, a widget of the view's, or nothing). Choosing the view, or another
+     * view, rebuilds the browser. Failure works as for {@link #results}, and the field goes back to
+     * its row.
+     */
+    View searchRow(SearchRowFactory factory);
+
+    /**
+     * While active, {@code factory} gets the side browser's details pane before Bitwig puts it under
+     * the results, and returns what goes there in its place (the pane, customised or wrapped).
+     * Choosing the view, or another view, rebuilds the browser. Failure works as for
+     * {@link #results}, and the pane goes back to its place.
+     */
+    View details(DetailsFactory factory);
+
     /** True while this view is the chosen one and working (its claims apply). */
     boolean active();
 }

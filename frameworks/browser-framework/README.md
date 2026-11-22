@@ -61,6 +61,16 @@ A view is a way of running the browser that a mod offers. The user picks the act
 
 **Results slot.** A view may place the side browser's results column itself (`View.results`): while the view is active, each side browser hands its results column to the view's factory as it lays out its rows, and shows the widget the factory returns in its place, normally one that holds the column beside or under the view's own widgets (the Pre-5.0 view's pane, header and type column). The slot (`ResultsSlot`) gives the side browser (`cFV`), its session (`Jp`), the column, `onFiltersChanged(listener)` (a filter of the session got or lost a value, or was offered or not) and `fail(reason)`. A factory that throws or returns something that isn't a widget makes the view's claims lapse and the results show alone. A launch marker is stored before the factory runs and cleared once its widget is on screen 3 s later; a launch that finds it (the last one crashed, hung or drew nothing) sets Browser view back to Standard.
 
+**Setup.** A view may set itself up for each side browser before the side browser uses its session (`View.setup`). While the view is active, the factory runs at the start of each side browser's build, before the side browser reads its session for the first time (it builds the results list from it next). The `Setup` it gets gives the side browser (`cFV`), its document (`pHd`), its session (`Jp`), `live()` and `onDispose(action)`. The session itself exists earlier: Bitwig restores it with the project. What the factory returns, any object, is the view's handle for that side browser: its slots and its panel give it back as `handle()`, so one object can follow the side browser from its setup to its disposal.
+
+**Search-row slot.** A view may place the side browser's search field (`View.searchRow`). The side browser builds its search row after its results column, so the factory runs after the results slot, and a widget the results slot returned is already in place. The slot (`SearchRowSlot`) gives `field()`, Bitwig's search field with its own padding, in no container yet, and `row()`, the row the framework would place: the field, or with the All Sources button feature the button and the field side by side. The factory returns what goes in the search row, padded as Bitwig pads its field: normally `row()`, the field, or a widget holding it. It may instead put the field in a widget of its own inside the side browser, such as the one its results slot returned, and return null: the search row is then left empty and hidden, and the layout closes the gap. The field keeps working in its new place: typing, Bitwig's focus requests and the browser's keys reach it as in its own row. Don't use `row()` for a field placed elsewhere.
+
+**Details slot.** A view may customise or wrap the details pane under the results (`View.details`). The factory runs before Bitwig puts the pane under the results list, gets it as `DetailsSlot.details()`, in no container yet, and returns what goes there: normally the pane itself or a widget holding it. The Show details pane feature shows and hides what it returns. The details slot comes before the results slot, so the column the results slot hands over holds the results list and, under it, what the details slot returned.
+
+**Identity and lifetime.** Every slot (`ResultsSlot`, `SearchRowSlot`, `DetailsSlot`) and the `Panel` give `document()` (the document the side browser belongs to) and `handle()` (what the view's setup returned for that side browser, or null). The slots also give `live()` (true until the side browser is disposed) and `onDispose(action)` (runs when it is disposed, at once if it already is), as the panel does. A side browser is disposed when its window is rebuilt or closed, so a view can keep per-panel state, such as a second mode of its own widget, against `document()` and let it go in `onDispose`.
+
+**Failure.** A setup or slot factory that throws, or a slot factory that returns something that isn't a widget or a widget already in a container, makes the view's claims lapse (logged), and the browser is rebuilt as Bitwig builds it. Until then the side browser being built goes on as Bitwig's: a search field or details pane the view had put in a widget of its own is taken out of it and placed as Bitwig places it, so the field keeps working even when the results slot has already placed the view's widget.
+
 **Content.** A view may show its own widget in the side browser panel (`View.content`). While the view is active, each window's Browser panel shows the view's widget in place of Bitwig's browser content; Bitwig's browser stays built underneath, hidden, so its search session, filters, cue player and library keep working. Settings is the only switch between Bitwig's browser and the view: choosing the view, or another view, rebuilds the browser (its source, search and filters stay), and the panel shows the chosen one. The framework draws nothing of its own in the panel.
 
 The widget comes with a `Panel`: the panel's helpers for what a browser does, each through Bitwig's own code.
@@ -115,7 +125,7 @@ api.version=1
 provider.class=com.example.mymod.MyBrowser
 ```
 
-**3. The provider**, compiled against this framework's `helper.jar` (`"classpath_mods": ["browser-framework@0.3.0-dev.1"]`):
+**3. The provider**, compiled against this framework's `helper.jar` (`"classpath_mods": ["browser-framework@0.4.0-dev.1"]`):
 
 ```java
 import bml.browser.Browser;
@@ -143,6 +153,19 @@ public final class MyBrowser implements BrowserProvider {
                .claims(Feature.SOURCE_HEADER_VISIBLE, false)
                .results(slot -> new MySidebar(slot)); // one of Bitwig's widgets holding slot.results()
 
+        browser.view("composed", "Composed")
+               .setup(setup -> new MyBinding(setup.document(), setup.session())) // before the session is used
+               .details(slot -> slot.details())                       // or a widget holding it
+               .results(slot -> {
+                   MyBinding binding = (MyBinding) slot.handle();
+                   slot.onDispose(binding::close);
+                   return binding.widgetHolding(slot.results());       // one of Bitwig's widgets
+               })
+               .searchRow(slot -> {
+                   ((MyBinding) slot.handle()).placeSearchField(slot.field()); // into the widget above
+                   return null;                                        // the search row stays empty
+               });
+
         browser.view("files", "Files")
                .content(panel -> {
                    MyFilesWidget widget = new MyFilesWidget(panel); // one of Bitwig's widgets (a dve)
@@ -160,9 +183,10 @@ public final class MyBrowser implements BrowserProvider {
   - `tileResource`: the kind's tile, a raster tile as Bitwig draws its own kinds' (`images/library/<id>.webp`): a resource in your `mod.json`, either one of Bitwig's tiles by reference (`"kind": "bitwig"`, `"path": "images/library/templates.webp"`) or your own WebP file; never a copy of Bitwig's files. An SVG (`icons/...`) isn't drawn: Bitwig shows its missing-image mark.
   - `iconName`: the small icon where Bitwig draws the file kind by name (the file kind filter's values), one of Bitwig's icon names such as `"browser/document.svg"`; null keeps Bitwig's.
   - The first mod to declare a file kind wins; an id that isn't one of Bitwig's file kinds is skipped (logged).
-- `View`: `claims(feature, value)`, `claims(feature, scope, value)`, `onActive(context)`, `onInactive(context)`, `content(factory)`, `results(factory)` (the results slot, above), `active()` (true while the view is chosen and working). `ViewContext` gives `viewId()`, `features()` and `panels()` (the live panels showing the view's content, the most recently built last; a mod's action uses it to show and focus one).
+- `View`: `claims(feature, value)`, `claims(feature, scope, value)`, `onActive(context)`, `onInactive(context)`, `content(factory)`, `results(factory)`, `setup(factory)`, `searchRow(factory)`, `details(factory)` (above), `active()` (true while the view is chosen and working). Each side browser runs them in its build order: setup, details, results, search row, content.
+- `SetupFactory.create(setup)` returns the handle (any object, or null); `ResultsFactory`, `SearchRowFactory` and `DetailsFactory` return the widget for their slot. Each is called once per side browser built with the view active. `ViewContext` gives `viewId()`, `features()` and `panels()` (the live panels showing the view's content, the most recently built last; a mod's action uses it to show and focus one).
 - `ContentFactory.create(panel)`: returns the view's widget for one panel, one of Bitwig's widgets, new each time; called while the side browser is built, once per window's Browser panel.
-- `Panel`: the helpers above, and `viewId()`, `live()`, `content()` (the widget), `browser()` (Bitwig's side browser).
+- `Panel`: the helpers above, and `viewId()`, `live()`, `content()` (the widget), `browser()` (Bitwig's side browser), `document()`, `handle()`.
 - Records: `ContentLocation(folder, name)`; `IndexHit(file, name, kind, key, vendor, category, format, deviceType)`: `file` is null for an item without one (only from `searchLibrary` and `listLibrary`), `key` is Bitwig's own path for the item (a file's path; for a plug-in its binary and its ID in it), `vendor` a plug-in's vendor, `category` a device's or plug-in's category in Bitwig's index, `format` `vst2`, `vst3` or `clap` for a plug-in, `deviceType` `audio`, `note`, `instrument` or `note_detector` for a device or plug-in, each empty where it doesn't apply (`new IndexHit(file, name, kind)` makes a file's hit); `ProjectItem(id, kind, name, track, depth)`: `kind` is `track`, `device` or `clip`, `track` the name of the track it is on, `depth` how many listed items it is inside (0 for a top-level track), `id` the framework's handle for it.
 - Call on Bitwig's UI thread; `declare` is called once, before any browser session builds its filter list (so before the first browser is built), and the chosen view is active from then on.
 
@@ -170,6 +194,7 @@ public final class MyBrowser implements BrowserProvider {
 
 - A failure in the framework's hooks is logged and falls back to Bitwig's own behaviour.
 - A provider that can't be loaded or throws in `declare` is logged and skipped; other mods are unaffected. A view whose `onActive` throws loses its claims.
-- A view's content or results factory that throws or returns something that isn't a widget, and any callback a view hands a panel that throws (`onDispose`, `onPreviewLoaded`, `done`, `results`), make the view's claims and content lapse (logged): the browser is rebuilt with Bitwig's own content.
+- A view's setup that throws, a content or slot factory that throws or returns something that isn't a widget (or, for a slot, a widget already in a container), and any callback a view hands a panel that throws (`onDispose`, `onPreviewLoaded`, `done`, `results`), make the view's claims and content lapse (logged): the browser is rebuilt with Bitwig's own content.
+- A disposal action handed to a setup or slot (`onDispose`) that throws is logged; the other actions still run.
 - A panel helper that Bitwig refuses or that fails is logged and returns `false`, null, `NaN`, `-1` or an empty list; it never throws.
 - The framework keeps only the chosen view and the stored values of the deprecated `set`, in `mods/browser-framework/settings.properties` in Patchbay's settings folder (**Settings > Settings Folder** in Patchbay's window shows where). What a mod hides isn't stored.

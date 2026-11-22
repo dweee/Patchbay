@@ -10,7 +10,8 @@ public interface Layout {
 
     /**
      * Builds the profile's view stack: the given Bitwig views (bound first, in this order), then
-     * every registered view (alphabetical by label), one above the other, each shown and hidden on
+     * every registered view for the main area (alphabetical by label; not the views on the browser
+     * side, View#side), one above the other, each shown and hidden on
      * its own. Returns the stack's layout node ({@code akw}) for the policy to put in place; the
      * framework adds the stack's buttons in place of Bitwig's mode chooser. One such stack per
      * profile. Each view keeps its saved values (visibility, the divider above it) whichever other
@@ -20,15 +21,18 @@ public interface Layout {
 
     /**
      * Builds side columns in one of Bitwig's left/right splitters ({@code akZ}): the given Bitwig
-     * views (bound first; no mods' views) side by side, each a full-height column with its own
-     * width, saved with the project. The first view takes the place of {@code replaced} (one of the
+     * views (bound first) side by side, each a full-height column with its own width, saved with
+     * the project. When the columns hold the Browser panel, the mods' views on the browser side
+     * (View#side) follow as more columns, after these. The first view takes the place of {@code replaced} (one of the
      * splitter's parts, for example the browser side's tab group) at the window's edge; the others
      * follow towards the other part (the main area), which keeps its saved values. Showing a
      * column takes width from that part and hiding it gives it back; the other columns keep their
      * widths. Each panel keeps Bitwig's own button, with the view buttons' clicks: click shows it
      * alone (again: hides it), Cmd/Ctrl-click adds or removes it, right-click its scale. Each
      * column keeps its own width (no Equalise). All may be hidden. The splitter's
-     * own saved width becomes the first column's. A panel is in one stack at most.
+     * own saved width becomes the first column's. A panel is in one stack at most. If a policy's
+     * arrange moves the first column to the splitter's other side (Panel: Choose Sides), the
+     * framework moves the other columns with it, so they stay beside it.
      */
     void sideColumns(Object splitter, Object replaced, String... bitwigViewIds);
 

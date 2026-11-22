@@ -14,7 +14,22 @@ public interface ResultsSlot {
     /** The side browser's search session (a {@code Jp}): its source, search and filters. */
     Object session();
 
-    /** Bitwig's results column (a {@code dve}), to place in the widget the factory returns. */
+    /** The document the side browser belongs to (a {@code pHd}). */
+    Object document();
+
+    /** What the view's {@link View#setup setup} returned for this side browser, or null. */
+    Object handle();
+
+    /** True until the side browser is disposed (its window is rebuilt or closed). */
+    boolean live();
+
+    /** Runs {@code action} when the side browser is disposed; at once if it already is. */
+    void onDispose(Runnable action);
+
+    /**
+     * Bitwig's results column (a {@code dve}), to place in the widget the factory returns. It holds
+     * the results list and, under it, the details pane (or what the view's details slot returned).
+     */
     Object results();
 
     /**
