@@ -8,14 +8,15 @@ import bml.actions.Actions;
 /**
  * The framework's own registration with the Actions and Menus framework (Bitwig's Panel Management
  * category). For every view (and every Bitwig view with an icon, which can be in a stack):
- * "Show <label>" ({@code <mod_id>_show_<view_id>}): in a stack (main or side) shows it alone, else toggles its
- * tab in the window's current mode; "Add or Remove <label> in the Split"
+ * "Show <label>" ({@code <mod_id>_show_<view_id>}): in a stack (main or side columns) shows it alone, else
+ * toggles its tab (in the window's current mode, or on its browser side); "Add or Remove <label> in the Split"
  * ({@code <mod_id>_split_<view_id>}) and "Equalise View Sizes"
  * ({@code panel_management_framework_equalise}): only where they can act. Bitwig registers
  * actions before it builds any display profile, so this follows the declarations: a mod's own
  * view gets its split action, and Equalise exists, only when a layout policy builds a view stack
  * (Panels.policy(policy, true)); a Bitwig view gets Show and split only when its mod has a policy
- * (it is in that mod's stack or side columns). Not part of the API.
+ * (it is in that mod's stack or side columns); a view on the browser side gets split only as a
+ * column (View.sideColumn), never in the main stack. Not part of the API.
  */
 public final class PanelActions implements ActionProvider {
     /** Bitwig's own "Panel Management" category in the shortcut settings and the Commander. */
@@ -26,7 +27,9 @@ public final class PanelActions implements ActionProvider {
         boolean stacks = Registry.viewStacks(); // a policy builds a view stack: the mods' views can be in it
         for (Registry.Declared view : Registry.all()) {
             if (view.icon == null) continue; // Bitwig panels outside stacks (panels declared by class for their scale, the device panel)
-            boolean stackable = view.bitwig ? Registry.hasPolicy(view.modId) : stacks; // a Bitwig view: in its mod's stack or side columns
+            boolean stackable = view.bitwig ? Registry.hasPolicy(view.modId) // a Bitwig view: in its mod's stack or side columns
+                    : view.side != null ? view.sideColumn                     // on the browser side: a column, or a tab
+                    : stacks;
             if (view.bitwig && !stackable) continue; // a Bitwig view acts only in a stack or side columns
             actions.action(view.modKey() + "_show_" + view.id, "Show " + view.label)
                    .category(PANELS)

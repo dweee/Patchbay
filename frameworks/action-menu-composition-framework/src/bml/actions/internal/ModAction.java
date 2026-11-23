@@ -39,6 +39,15 @@ final class ModAction extends dmX {
         return menuLabel != null ? menuLabel : super.Hnt();
     }
 
+    /**
+     * Bitwig's description lookup: the translation of the action's ID, else its label. A mod's action
+     * ID has no translation, so this is the label, answered without the lookup.
+     */
+    @Override
+    public String iHb() {
+        return label;
+    }
+
     /** Bitwig's icon lookup: the resource path of one of Bitwig's icons, or none. */
     @Override
     public String fJR() {

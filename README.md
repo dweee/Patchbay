@@ -6,7 +6,7 @@
 
 Patchbay Mod Loader loads mods into Bitwig Studio; its window is called Patchbay for short, and its files and folders are named BML. When Bitwig starts, it changes Bitwig's code in memory so mods can add to it or change how it behaves. Bitwig's own files on disk are never modified: start Bitwig without Patchbay and it runs as it always does.
 
-- **Supported:** Bitwig Studio 6.0, 6.1, 6.1.1, 6.1.2, 6.1.3 and 6.1.4 on Windows x64; the same versions on Linux x64 and on macOS 12 or newer (Apple silicon and Intel); on Linux and macOS, 6.0-6.1.3 are not yet tested in Bitwig. BML is unsigned on macOS: the first start of each download is one Terminal line (`INSTALL.md` in the macOS release).
+- **Supported:** Bitwig Studio 6.0, 6.0.11, 6.1, 6.1.1, 6.1.2, 6.1.3, 6.1.4 and 6.1.7 on Windows x64, Linux x64 and macOS 12 or newer (Apple silicon and Intel). On Linux and macOS, only 6.1.4 has been tested in Bitwig so far. BML is unsigned on macOS: the first start of each download is one Terminal line (`INSTALL.md` in the macOS release).
 - **Mods:** BML ships with mapping designed to facilitate best-effort matching of mods written against a version of Bitwig to all other supported versions of Bitwig. Currently, this is in place for mods written against 6.1.4. Mods written against other supported versions will work when loading that version.
 - **Status:** pre-release, for testers.
 
@@ -22,7 +22,7 @@ Patchbay Mod Loader loads mods into Bitwig Studio; its window is called Patchbay
 
 `INSTALL.md` inside the ZIP has the full steps, including what to check in **Settings** and **Maps** and what to send when something goes wrong.
 
-The release contains the loader, the map packs, the eight frameworks and every accepted mod. The mods' source is in the [Mods](https://github.com/shaboogen-dev/Mods) repository.
+The release contains the loader, the map packs and the ten frameworks. Mods are separate downloads from the [Mods releases page](https://github.com/shaboogen-dev/Mods/releases): add them in Patchbay with **Add Mod…**. Their source is in the [Mods](https://github.com/shaboogen-dev/Mods) repository.
 
 ## Where BML keeps things
 

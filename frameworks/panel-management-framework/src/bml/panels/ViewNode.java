@@ -8,6 +8,8 @@ import bitwig.obf.aYH; // a panel's widget
 import bitwig.obf.ajF; // a tab group (several panels, one shown)
 import bitwig.obf.akQ; // a panel
 import bitwig.obf.akS; // Bitwig's generic description of a panel (its meta)
+import bitwig.obf.aka; // a panel or tab group: which group of the bottom bar its buttons go to
+import bitwig.obf.akw; // a part of a window's layout
 import bitwig.obf.dAd; // a toggle button widget
 import bitwig.obf.dUZ; // the saved values a part of a layout declares
 import bitwig.obf.dVe; // a saved text value
@@ -70,17 +72,63 @@ final class ViewNode extends akQ {
     }
 
     /**
-     * Called by the framework once, before the node is placed: as a tab of a mode's lower panel
-     * (shown by its tab group's choice) or as a view of a stack (its own "is shown", hidden by default).
+     * Called by the framework once, before the node is placed: as a tab of a tab group (shown by
+     * the group's choice) or as a view of a stack (its own "is shown", hidden by default).
      */
     final void init(Registry.Declared view, boolean inStack) {
+        init(view, inStack, false);
+    }
+
+    /**
+     * As {@link #init(Registry.Declared, boolean)}; {@code shown}: in a stack or side columns,
+     * whether it is shown by default (a side column view: View.sideColumn).
+     */
+    final void init(Registry.Declared view, boolean inStack, boolean shown) {
         this.view = view;
         IwV(view.nodeName()); // its name: the path segment of its saved values
         ODA = view.icon;      // its icon
         vpw = view.label;     // its button's text
         lYc(inStack);         // in a stack: an "is shown" of its own; a tab: none
-        if (inStack) TtY(false); // hidden by default
+        if (inStack) TtY(shown); // hidden by default, unless shown
         H_();                 // Bitwig's initialisation
+    }
+
+    /**
+     * Which group of the bottom bar its button goes to (Bitwig reads it as it adds the buttons of
+     * the panels outside the main area: true the left group, false the right). In side columns:
+     * the group of the columns' edge (the browser side's), on whichever side of the window it is
+     * now, so the button stays with the browser side's buttons. Elsewhere Bitwig's own flag.
+     */
+    @Override
+    public boolean Scv() {
+        try {
+            Stack stack = Layouts.stackOf(this);
+            if (stack != null && stack.side) {
+                akw edge = stack.edgePart();
+                return edge instanceof aka grouped ? grouped.Scv() : stack.edgeOnLeft();
+            }
+        } catch (Throwable failure) {
+            Registry.LOG.log("could not find the side of " + view.who() + "'s button", failure);
+        }
+        return super.Scv();
+    }
+
+    /**
+     * Whether Bitwig puts a divider before its button (akQ.Hnt reads it; Bitwig adds one only after
+     * another button). In side columns: only the first of the mods' columns' buttons in the bar, so
+     * the mods' buttons sit together, set apart from the browser side's by one divider as the
+     * keyboard's is, the same with the browser side on the left or the right. Elsewhere Bitwig's
+     * own flag.
+     */
+    @Override
+    public boolean jFL() {
+        try {
+            Stack stack = Layouts.stackOf(this);
+            if (stack != null && stack.side) return stack.firstModButton() == this;
+        } catch (Throwable failure) {
+            Registry.LOG.log("could not find the divider of " + view.who() + "'s button", failure);
+        }
+        return super.jFL();
     }
 
     Registry.Declared view() {

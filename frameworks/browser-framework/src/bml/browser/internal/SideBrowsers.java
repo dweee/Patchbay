@@ -2,8 +2,11 @@ package bml.browser.internal;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 import bitwig.obf.AQw; // a boolean value
 import bitwig.obf.DC; // a browser filter
@@ -53,6 +56,8 @@ final class SideBrowsers {
     /** The side browser being built and the rows it has added so far (it builds on the UI thread). */
     private static final ThreadLocal<Object[]> BUILDING = ThreadLocal.withInitial(() -> new Object[6]);
     private static final List<Rows> ALL = new ArrayList<>();
+    /** The rows {@link #searchRow} built with the All Sources button (held weakly). */
+    private static final Set<dve> BUTTON_ROWS = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
     private SideBrowsers() {
     }
@@ -86,11 +91,17 @@ final class SideBrowsers {
             dWb row = dWb.cfM(BUTTON_GAP, new dve[] {placed(allSourcesButton(browser))});
             row.UNj(0.5f); // centred across the row, as in the toolbar
             row.cfM(search, 1f);
+            BUTTON_ROWS.add(row);
             return row;
         } catch (Throwable t) {
             State.LOG.log("building the All Sources button failed; the search field is shown alone", t);
             return search;
         }
+    }
+
+    /** True when {@code row} is a row {@link #searchRow} built with the All Sources button (it has its own inset). */
+    static boolean isButtonRow(dve row) {
+        return row != null && BUTTON_ROWS.contains(row);
     }
 
     /**

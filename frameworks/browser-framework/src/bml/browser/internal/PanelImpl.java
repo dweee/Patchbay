@@ -141,6 +141,19 @@ final class PanelImpl implements Panel {
     }
 
     @Override
+    public Object document() {
+        Instances.Instance instance = Instances.of(browser);
+        Object document = instance == null ? null : instance.document();
+        return document != null ? document : project;
+    }
+
+    @Override
+    public Object handle() {
+        Instances.Instance instance = Instances.of(browser);
+        return instance == null || instance.view != view ? null : instance.handle();
+    }
+
+    @Override
     public Map<String, Object> state() {
         return Contents.state(project, view.key());
     }

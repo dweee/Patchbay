@@ -36,6 +36,29 @@ public interface View {
      */
     View replaces(String bitwigPanel);
 
+    /**
+     * A place for the view outside the main area: {@code "browser"}, the browser side (the tab
+     * group of the Browser, Project, Studio I/O and Mappings panels). The view becomes one more tab
+     * of each window's browser side, after Bitwig's own tabs, its button after theirs in the bottom
+     * bar and working as theirs do; it is then neither a tab of the modes' lower panels nor a view of
+     * a stack. Where a layout mod has made the browser side's panels side columns, the view is one
+     * more column, after theirs (towards the main area), hidden by default. A window without a
+     * browser side doesn't show the view (logged once per profile). Without a side (the default) the
+     * view goes in the main area.
+     */
+    View side(String place);
+
+    /**
+     * With {@link #side}: true makes the view a full-height column of its own between the main area
+     * and the browser side, instead of one of its tabs: a side column (Layout#sideColumns) with its
+     * own width (saved with the project), shown by default, its button in Bitwig's order with the
+     * other side panels' buttons and the view buttons' clicks (click shows it alone, again hides it;
+     * Cmd/Ctrl-click adds or removes it). Where a layout mod has made side columns of the browser
+     * side's panels, it is one more of them, after theirs. It stays beside the browser side when the
+     * side is moved (Panel: Choose Sides). Default false.
+     */
+    View sideColumn(boolean column);
+
     /** Whether it has a scale: Panel Scale setting and right-click scale choices (default true). */
     View scale(boolean scalable);
 

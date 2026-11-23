@@ -98,14 +98,23 @@ public static void beforeInvoke(@This cNI listener) { ... }
 | `at` | Runs | Hook parameters | Hook returns |
 |---|---|---|---|
 | `ENTRY` | before the method's first instruction | `@This` and/or `@Arg(n)` | `void` |
-| `BEFORE_RETURN` | just before the method's final return | `@This` / `@Arg(n)`, objects only | `void` |
-| `WRAP_RETURN` | on the value the method returns | `@Return` first, then `@This` / `@Arg(n)`, objects only | the value to return instead (the method's type or `Object`) |
+| `BEFORE_RETURN` | just before the method's final return; with `allReturns = true`, before every return | `@This` / `@Arg(n)`, objects only | `void` |
+| `WRAP_RETURN` | on the value the method returns at its final return; with `allReturns = true`, at every return | `@Return` first, then `@This` / `@Arg(n)`, objects only | the value to return instead (the method's type or `Object`) |
 | `REPLACE_CALL` | instead of one call inside the method | the call's receiver (unless static), then its arguments; no annotations | what the call returns |
 | `OVERRIDE_AFTER_SUPER` | a new override of an inherited method: Bitwig's method, then the hook | `@This` / `@Arg(n)` | `void` |
 | `OVERRIDE_BEFORE_SUPER` | a new override: the hook, then Bitwig's method | `@This` / `@Arg(n)` | `void` |
 | `OVERRIDE_INSTEAD` | a new override: only the hook | `@This` / `@Arg(n)` | exactly the overridden method's type |
 
 `@Arg(n)` counts the target method's parameters from 0. A hook parameter's type must accept the value: the same type, a supertype, or `Object`.
+
+The final return is the last return instruction in the method's bytecode. A method that returns early from a branch (a guard clause, a `switch` case) leaves there without running a `BEFORE_RETURN` or `WRAP_RETURN` hook. `allReturns = true` runs the hook at every return, for example when the value you wrap is returned from several branches:
+
+```java
+@Hook(target = abc.class, method = "label", at = At.WRAP_RETURN, allReturns = true)
+public static String label(@Return String label, @This abc button) { ... }
+```
+
+With `allReturns`, `@This` and `@Arg(n)` are the object and the parameters the method was called with. It can't hook a constructor or static initializer. `javap -c` shows a method's returns: its `return` / `areturn` lines. The manifest gets `"returns": "all"` (`loader/MANIFEST-FORMAT.md`, Final return or every return).
 
 `REPLACE_CALL` names the call with `callOwner` (the class in the call instruction), `call` (name, or name and descriptor) and `occurrence` (which matching call, counting from 1 in the method):
 
@@ -119,5 +128,5 @@ public static ghi addOwnRow(def menu, String label) { ... }
 
 - **One helper class:** all `@Hook` methods must be in the class named as the manifest's helper.
 - **`REPLACE_CALL`:** each call can be replaced by one hook. Several calls of the same method in one target method each take their own hook, with its `occurrence` counted in the original method; the kit writes the manifest's occurrences as the loader counts them (after the mod's own earlier hooks' replacements). Other mods' hooks don't change the numbering.
-- **`WRAP_RETURN` with `@This` or `@Arg`:** the loader reads them at the return, where Bitwig's stack map frames may no longer hold them (javac drops locals a method no longer uses), and the class then fails verification (`Bad local variable type`; offline prepare catches it). Take only `@Return` there, and note what you need with an `ENTRY` hook on the same method.
+- **`WRAP_RETURN` with `@This` or `@Arg`:** the loader reads them at the return, where Bitwig's stack map frames may no longer hold them (javac drops locals a method no longer uses), and the class then fails verification (`Bad local variable type`; offline prepare catches it). Take only `@Return` there, and note what you need with an `ENTRY` hook on the same method. With `allReturns = true` this doesn't apply: the hook runs where the method's object and parameters are always held.
 - **Methods that differ only in return type** (240 of Bitwig 6.1.3's 289,266 methods) can't be called from Java source, which can't tell them apart.

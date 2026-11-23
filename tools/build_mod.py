@@ -185,6 +185,8 @@ def kit_manifest(mod: str, manifest: dict, found: dict) -> bytes:
     hooks = m.get("hooks", [])
     for h in found["hooks"]:
         out = {"id": h["id"], "target": target_id(h["target"]), "transform": h["transform"]}
+        if "returns" in h:  # only "all" is written; without it the hook runs at the final return
+            out["returns"] = h["returns"]
         if "method_from" in h:
             out["method"] = {"from_target": target_id(h["method_from"])}
             out["body"] = {"template": h["body"]}

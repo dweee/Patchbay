@@ -4,9 +4,12 @@ package bml.api;
 public enum At {
     /** Before the first instruction. */
     ENTRY,
-    /** Just before the method's final return. */
+    /** Just before the method's final return; with {@link Hook#allReturns()}, before every return. */
     BEFORE_RETURN,
-    /** Receives the value the method is about to return and returns the value to use instead. */
+    /**
+     * Receives the value the method is about to return at its final return and returns the value to
+     * use instead; with {@link Hook#allReturns()}, at every return.
+     */
     WRAP_RETURN,
     /** Instead of one call inside the method (see {@link Hook#call()}). */
     REPLACE_CALL,
