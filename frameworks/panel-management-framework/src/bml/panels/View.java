@@ -59,6 +59,17 @@ public interface View {
      */
     View sideColumn(boolean column);
 
+    /**
+     * {@link #sideColumn}{@code (true)}, with the column's width as a share of its split instead of
+     * a width in pixels: {@code share} (above 0, below 1) is the column's part of the width it
+     * shares with the main area (the column and everything between it and the main area's far
+     * edge; not the browser side). The column starts at that share and keeps its share when the
+     * window is resized; dragging its divider changes the share, saved with the project under a
+     * name of its own (a width in pixels saved for the same view is not read as a share). Otherwise
+     * as sideColumn(true). A share outside (0, 1) is logged and ignored.
+     */
+    View sideColumnShare(double share);
+
     /** Whether it has a scale: Panel Scale setting and right-click scale choices (default true). */
     View scale(boolean scalable);
 

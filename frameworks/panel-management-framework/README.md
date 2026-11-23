@@ -83,7 +83,7 @@ public final class MyPanels implements PanelProvider {
   - Bitwig's own Toggle Mixer Panel chooses the mixer again.
   - The mixer keeps its saved settings, and the choice is saved per mode with the project.
   - Other modes keep the view as a lower-panel tab.
-- **`.side("browser")`** and **`.sideColumn(true)`:** the view goes on the browser side instead of the main area. See [The browser side](#the-browser-side).
+- **`.side("browser")`**, with **`.sideColumn(true)`** or **`.sideColumnShare(share)`:** the view goes on the browser side instead of the main area. See [The browser side](#the-browser-side).
 - **`.savedText(key, default)`:** a text value kept with the project's view settings (per display profile), never in the project. There is one value per profile, shared by every place the view is in.
 - **Icons:** the icon is required and is a resource from the mod's manifest.
   - `"kind": "bitwig"`: one of Bitwig's SVG icons, by its path under `icons/`. The framework checks that the file exists.
@@ -97,12 +97,15 @@ public final class MyPanels implements PanelProvider {
 
 A view can go on the **browser side** instead of the main area: the tab group of the Browser, Project, Studio I/O and Mappings panels.
 
+**No minimum width beside it.** Whenever the framework is loaded, the main area beside the browser side's tab group has no minimum width, on either side of the window and in every display profile, with or without views or layout mods. The browser side can be dragged as wide as the window allows, and a width it is given (by a drag, or by a mod) applies in full. The main area is then narrower, down to nothing; its content keeps its own minimum size and is cut off from its left edge, and the divider can still be dragged back to widen it. The window's own minimum width no longer includes the main area's.
+
 ```java
 panels.view("my_view", "My View")
       .icon("my_icon")
       .content(context -> MyWidget.create(context))
       .side("browser")     // on the browser side, not in the main area
       .sideColumn(true);   // optional: a column of its own beside it, not a tab
+                           // or .sideColumnShare(0.4): a column whose width is a share
 ```
 
 **As a tab** (`side("browser")`):
@@ -114,6 +117,7 @@ panels.view("my_view", "My View")
 **As a column** (`side("browser")` and `sideColumn(true)`):
 - **Where:** a full-height column between the main area and the browser side. It is a side column (see `sideColumns` below), so it behaves as the other side columns do.
 - **Width:** its own, taken from the main area when it is shown and given back when it is hidden. The width is saved with the project, as is whether it is shown. It is shown by default. Like every side column, it never makes the window wider.
+- **Width as a share:** with `sideColumnShare(share)` in place of `sideColumn(true)`, the column's width is a share of the width it shares with the main area (the column and everything between it and the main area's far edge, not the browser side). `share` is above 0 and below 1: `0.4` starts the column at 40% and the main area at 60%. The column keeps its share when the window is resized, and dragging its divider changes the share. The share is saved with the project under a name of its own, so a width in pixels saved for the same view isn't read as a share. A share outside that range is logged and ignored. Everything else is as `sideColumn(true)`.
 - **Its button** goes in the bottom bar's group with the browser side's buttons, in Bitwig's order (the order of the panels on screen), so it sits on the main-area side of them. The mods' column buttons sit together, set apart from the browser side's by one divider, as the On-Screen Keyboard's button is set apart, whichever side the browser side is on. A click shows the column alone, or hides it if it is already shown alone. Cmd/Ctrl-click adds it to the columns shown or removes it. Right-click gives its scale.
 - **Actions:** **Show <label>** shows it alone. **Add or Remove <label> in the Split** adds or removes it.
 - **When the browser side moves** to the other side of the window (Panel: Choose Sides), the column moves with it and stays beside it.
@@ -147,7 +151,7 @@ panels.policy(new MyLayout(), true);                        // a bml.panels.Layo
 - `stack(name, bitwigViewIds...)`: builds the view stack, returning its layout node for the policy to put in place. It holds those Bitwig views in that order, then every registered view for the main area (not the browser-side views). One per profile; its buttons replace the mode chooser.
 - `sideColumns(splitter, replaced, bitwigViewIds...)`: builds **side columns** in one of Bitwig's left/right splitters: those Bitwig panels side by side, each a full-height column with its own width. The first takes the place of `replaced` (one of the splitter's two parts) at the window's edge; the others follow towards the splitter's other part (the main area). Panel: Separate Browser Panels uses it for the Browser Panel, Project Panel, Studio Monitoring Panel and Mappings Panel, in place of the browser side's tab group. When the columns hold the Browser panel, the mods' browser-side views follow as more columns.
   - Showing a column takes width from the main area and hiding it gives the width back; the other columns keep theirs. Each column's width is saved with the project; the splitter's own saved width becomes the first column's, and the main area keeps its saved values. A column opened for the first time starts at the first column's width.
-  - A column always opens when asked, and never makes the window wider: columns have no minimum width. The main area beside them has no minimum width either. When room runs out, the columns and the main area get narrower, down to nothing; nothing is closed. A panel's content, and the main area's, keeps its own minimum size and is cut off by a part narrower than it (the main area from its left edge). A narrow part's divider can still be dragged to widen it. While a window has side columns, its own minimum width no longer includes the main area's, so the window itself can be made narrower than Bitwig otherwise allows.
+  - A column always opens when asked, and never makes the window wider: columns have no minimum width. The main area beside them has no minimum width either. When room runs out, the columns and the main area get narrower, down to nothing; nothing is closed. A panel's content, and the main area's, keeps its own minimum size and is cut off by a part narrower than it (the main area from its left edge). A narrow part's divider can still be dragged to widen it. While a window has side columns, its own minimum width no longer includes the main area's, so the window itself can be made narrower than Bitwig otherwise allows. The main area beside the browser side's own tab group, without columns, has no minimum width either (see [The browser side](#the-browser-side)).
   - Each panel keeps Bitwig's own button in the bottom bar, with the clicks of a view button: click shows it alone, a click on the panel already shown alone hides it, Cmd/Ctrl-click adds it or removes it, right-click gives its scale. Each column keeps its own width (there is no Equalise for columns). All may be hidden.
   - A panel is in one stack or set of columns at most.
   - If a policy's `arrange` moves the first column to the other side of the splitter (as Panel: Choose Sides does), the framework moves the other columns with it, so they stay beside it. It does the same when the windows are rebuilt after such a move.
@@ -174,6 +178,25 @@ The panel gets Bitwig's scaled container, a right-click scale menu on its button
 - `showAlone`: a view of the policy's own is to be shown alone. Streamlined Views does this by choosing its mode.
 
 **For a layout mod's own hooks:** `bml.panels.Stacks.layout(profile)` returns the profile's `Layout`, and `Stacks.scaleMenu(button, modId, viewId)` gives a button the scale menu.
+
+## Arranging your own views
+
+A mod that builds layouts of its own (a mode of its own, another window's layout, a view shown full screen) can place its views there itself, with `bml.panels.Views`:
+
+- **`Views.newNode(modId, viewId)`:** a new panel node (`akQ`) of one of the mod's declared views, to put where Bitwig would put a panel.
+  - Every call gives a new node, since each place in a layout needs its own.
+  - The node is a plain panel, as the view is as a tab: it has no "is shown" of its own and shows wherever it is placed.
+  - It gets the view's content (built for each window that shows it), icon, label, button and scale. The view's saved values (`savedText`) are one per display profile, shared by all its nodes there.
+  - Its button's click shows it in the tab group holding it, as the framework's tabs do. Anywhere else, the mod decides how it is shown. The view's **Show** action doesn't act on it.
+  - Call it while a display profile is built: from a layout policy, or from the mod's own hook on profile building.
+  - It returns null (logged) when the mod declared no such view or the view was left out.
+- **`Views.nodes(window, modId, viewId)`:** the nodes the view has in a window (`aBW`) now, as a list.
+  - It includes the nodes outside the window's main areas (on the browser side, in side columns or in a view stack) and those in the window's current mode, whether the framework placed them or the mod did.
+  - Each window, and each mode, has nodes of its own.
+  - The list is in layout order: each splitter's first part (left or top) comes before its second. A mod that put the view in several places tells them apart by their parents (`uva()`).
+  - It is empty when the view isn't in the window's layout now.
+  - A node's "is shown" in a window, where it has one (a side column or a stack view), is `node.cfM(window.RDJ())`. A side column's width (its share, with `sideColumnShare`) is its parent splitter's saved position in the same view settings.
+- **`Views.icon(modId, resourceId)`:** the icon name a window loads for one of the mod's icon resources, for a button the mod builds itself. The resource follows the rules for a view's icon: a `"kind": "bitwig"` resource gives that Bitwig icon's name, and the mod's own SVG gives a name the framework loads from the mod's file, tinted as Bitwig's icons are. It returns null (logged) when the resource can't be used.
 
 ## What every view gets
 

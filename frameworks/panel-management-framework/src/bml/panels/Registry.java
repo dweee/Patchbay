@@ -31,6 +31,7 @@ final class Registry {
         String replaces;           // a Bitwig panel it can take the place of ("mixer"), or null
         String side;               // a place outside the main area ("browser", View.side), or null
         boolean sideColumn;        // with a side: a column of its own beside it (View.sideColumn)
+        double columnShare;        // a side column's share of its split (View.sideColumnShare), or 0: a width in pixels
         Class<?> panelClass;       // a Bitwig panel matched by class (Panels.bitwigPanel): its class
         final Map<String, String> savedTexts = new LinkedHashMap<>(); // key → default
         boolean scalable = true;
@@ -111,6 +112,18 @@ final class Registry {
         @Override
         public View sideColumn(boolean column) {
             d.sideColumn = column;
+            if (!column) d.columnShare = 0;
+            return this;
+        }
+
+        @Override
+        public View sideColumnShare(double share) {
+            if (share > 0 && share < 1) {
+                d.sideColumn = true;
+                d.columnShare = share;
+            } else {
+                LOG.log("view " + d.who() + ": a column's share must be above 0 and below 1, not " + share + "; ignored");
+            }
             return this;
         }
 
@@ -314,6 +327,7 @@ final class Registry {
                 if (v.sideColumn && v.side == null) {
                     LOG.log("view " + v.who() + ": sideColumn needs a side; it goes in the main area");
                     v.sideColumn = false;
+                    v.columnShare = 0;
                 }
                 if (v.side != null && v.replaces != null) {
                     LOG.log("view " + v.who() + ": a view on a side replaces no panel; replaces ignored");

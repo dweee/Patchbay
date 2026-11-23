@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import bitwig.obf.ajF; // a tab group (several panels, one shown)
 import bitwig.obf.akC; // a display profile: its windows and their layouts
 import bitwig.obf.akQ; // a panel
 import bitwig.obf.akW; // the Browser panel
@@ -85,6 +86,22 @@ final class Layouts implements Layout {
                 for (Stack s : l.sides) if (part != null && s.mainCore() == part) return true;
             }
         }
+        return false;
+    }
+
+    /**
+     * Whether a part is beside a browser side's own tab group: the other part of a left/right
+     * splitter (Bitwig's main_and_browser_splitter, or its like in each profile) whose part is a tab
+     * group holding the Browser panel. Either side of the splitter (Panel: Choose Sides). Not a
+     * mode's own tab group (MainChoice), and not side columns beside the group (ColumnSplit): their
+     * main area is the main core (isMainCore).
+     */
+    static boolean isBesideBrowserSide(akw part) {
+        if (part == null || part instanceof ColumnSplit) return false;
+        if (!(part.uva() instanceof akZ split) || !split.lYc()) return false; // uva(): its parent part; lYc(): left/right
+        akw other = split.E3() == part ? split.wGc() : split.wGc() == part ? split.E3() : null;
+        if (!(other instanceof ajF group) || other instanceof MainChoice) return false;
+        for (Object tab : group.lYc()) if (tab instanceof akW) return true; // its panels
         return false;
     }
 

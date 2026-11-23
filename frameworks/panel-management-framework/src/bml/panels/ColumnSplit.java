@@ -14,23 +14,45 @@ import bitwig.obf.akw; // a part of a window's layout
  * names: every part of a column split is named flat under the outermost splitter, so the main
  * area keeps the path it has without the columns (nothing of it resets), and each column split is
  * named by its column ({@code <outer>.column_<panel>}), so its saved width stays with its panel.
+ * A column kept as a share of the split (View.sideColumnShare) uses Bitwig's proportion modes and
+ * is named {@code <outer>.share_<panel>}, so a saved share and a saved width in pixels never mix.
  * A hidden column leaves no strip (view-splitter), in these and in Bitwig's outer splitter.
  */
 final class ColumnSplit extends akZ {
     private final akZ outer;  // Bitwig's splitter holding the outermost column
     private final akw column; // its panel
+    final boolean share;      // its column keeps a share of the split (a proportion), not a width in pixels
 
-    private ColumnSplit(akZ outer, akw column) {
+    private ColumnSplit(akZ outer, akw column, boolean share) {
         this.outer = outer;
         this.column = column;
+        this.share = share;
     }
 
-    /** The split for one column, with stand-ins as its parts until they are set. */
-    static ColumnSplit create(akZ outer, akw column) {
-        ColumnSplit split = new ColumnSplit(outer, column);
-        split.MRY("column_" + column.tSS(), true, akq.cfM("panel-stand-in"), akq.cfM("panel-stand-in")); // name, left/right, two stand-ins
+    /**
+     * The split for one column, with stand-ins as its parts until they are set; {@code share}:
+     * the column keeps a share of the split rather than a width in pixels.
+     */
+    static ColumnSplit create(akZ outer, akw column, boolean share) {
+        ColumnSplit split = new ColumnSplit(outer, column, share);
+        split.MRY(split.name(), true, akq.cfM("panel-stand-in"), akq.cfM("panel-stand-in")); // name, left/right, two stand-ins
         split.H_(); // Bitwig's initialisation
         return split;
+    }
+
+    /** Its name: by its column, and by what its saved value is (a width or a share). */
+    private String name() {
+        return (share ? "share_" : "column_") + column.tSS();
+    }
+
+    /**
+     * Bitwig's splitter mode for its column on the given side: the column's side keeps its width
+     * (SPLITTER_SETS_FIRST/SECOND_SIZE) or its share of the split (SPLITTER_SETS_FIRST/SECOND_PROPORTION,
+     * whose value is the share of that side).
+     */
+    dVx mode(boolean columnFirst) {
+        if (share) return columnFirst ? dVx.Hnt : dVx.FzB;
+        return columnFirst ? dVx.cfM : dVx.MRY;
     }
 
     /** Its column's panel. */
@@ -45,7 +67,7 @@ final class ColumnSplit extends akZ {
 
     /**
      * Puts its column on the given side (towards the window's edge) and the rest on the other,
-     * with the column's side keeping its width: after a layout mod moved the edge to the other side
+     * with the column's side keeping its width or share: after a layout mod moved the edge to the other side
      * of the window (Panel: Choose Sides swaps the splitters it knows), every column follows. The
      * paths don't change (flat under the outer splitter), so widths and visibility stay. Nothing if
      * it is already so.
@@ -56,7 +78,7 @@ final class ColumnSplit extends akZ {
         IwV(akq.cfM("panel-stand-in")); // the second part: a stand-in (a part has one parent)
         MRY(second);                     // the first part
         IwV(first);                      // the second part
-        cfM(columnFirst ? dVx.cfM : dVx.MRY); // the column's side keeps its width
+        cfM(mode(columnFirst)); // the column's side keeps its width or share
     }
 
     /**
@@ -80,7 +102,7 @@ final class ColumnSplit extends akZ {
     /** Its path (also the key of its saved divider position: the column's width). */
     @Override
     public String jG() {
-        return outer.jG() + ".column_" + column.tSS();
+        return outer.jG() + "." + name();
     }
 
     /** Bitwig's path rule for its two parts: flat under the outermost splitter. */
