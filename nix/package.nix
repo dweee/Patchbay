@@ -49,8 +49,8 @@ let
       };
     };
 
-  # tool_jar_sha256 of the official releases BML-0.36.0-dev.9 and dev.14 (Windows, Oracle JDK
-  # 25.0.4.1; the same in both). This build must give the same jars; when upstream changes a tool's
+  # tool_jar_sha256 of the official release BML-0.36.0-dev.17 (unchanged since dev.9 except
+  # bitwig-mod-preparer.jar). This build must give the same jars; when upstream changes a tool's
   # source (loader/src/loader/tools/src), take its hash from the new release's RELEASE-MANIFEST.json.
   releaseToolJars = {
     "bitwig-access-widener.jar" = "1a396dd3a6ed7fac4d23b60044155efbec813769b588d418254285bcadaa27c6";
@@ -60,14 +60,14 @@ let
     "bitwig-field-adder.jar" = "2c721eeccaf71da5cba8fe118796e34a1de100b16082fb50530624cfc5546d5d";
     "bitwig-helper-remapper.jar" = "d0c0c755ee5c45b3e250028d04fdae30dbcf36a205578dda4bb46e8016b1f262";
     "bitwig-invoke-replacer.jar" = "6957de68b561db41381b77a0ae766fd1cfa75ec99f8e8bc79ec4cc02a60c55f0";
-    "bitwig-mod-preparer.jar" = "0c4d0a4adae4fc30c3679ab8c1e48973757c668e4d5ea4b2c2ef42826d12c9b7";
+    "bitwig-mod-preparer.jar" = "9c7c60bb4c09349c137967b2edb79a06b6aee991b115f4dd85fc94f733868625";
     "bitwig-typed-local-patcher.jar" =
       "7ee6921d6d3a18aecdc836d6ea2ec5a052b116c6accedb81b32586b1f16d861a";
   };
-  # The same releases' modkit/bml-modkit.jar (modkit/src/tool).
-  releaseModkitJar = "67377ec1ca657b07fa2d9ebdef447a00b5d7c4f58fb7358e5b44ca50e7520258";
-  # api_jar_sha256 of BML-0.36.0-dev.14 (loader/src/loader/api/src); modkit builds the same jar.
-  releaseApiJar = "276d9c6d0d7e7a88a147eb998beb65576bee16a5b2098becd1f16b4e8db88ebc";
+  # The same release's modkit/bml-modkit.jar (modkit/src/tool).
+  releaseModkitJar = "adee3986ca56ac71b20e9b61858c0a06a76523117dbc1035d6a30f027f31f362";
+  # api_jar_sha256 of BML-0.36.0-dev.17 (loader/src/loader/api/src); modkit builds the same jar.
+  releaseApiJar = "bf0886f60fe0613f232356712970ba2a2c42ae04cb3a2285f02f38f62068c8f5";
 
   # What the build and its checks read; generated files and the git-ignored fonts are left out.
   wanted = [
