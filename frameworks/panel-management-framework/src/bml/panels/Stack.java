@@ -54,7 +54,7 @@ import com.bitwig.flt.document_view_settings.gJi; // a project's view settings f
  *
  * <pre>
  * Bitwig's splitter (its saved width: the first panel's)
- *   column_panel2 (ColumnSplit, its saved width: panel 2's)
+ *   column_panel2 (ColumnSplit, its saved width: panel 2's; share_panel2 for a share)
  *     column_panel3 ...
  *       what the splitter held before (the main area), with its own path
  *       panel 3
@@ -138,6 +138,7 @@ final class Stack {
      * More side columns, after the ones there are (towards the main area), in this order: each
      * innermost column's splitter gets a new one around what it held towards the main area, named
      * by its panel (ColumnSplit), so the main area keeps its path and each column its saved width.
+     * A view with a share (View.sideColumnShare) keeps that share of its split instead of a width.
      */
     void addColumns(List<Entry> more) {
         boolean edgeFirst = outer.E3() == edge; // E3(): the first (left) part
@@ -149,11 +150,12 @@ final class Stack {
             if (innerFirst) container.MRY((akw) akq.cfM("panel-stand-in")); // takes it out (a part has one parent)
             else container.IwV((akw) akq.cfM("panel-stand-in"));
             akw panel = entry.node();
-            ColumnSplit split = ColumnSplit.create(outer, panel);
+            double share = entry.view() != null ? entry.view().columnShare : 0;
+            ColumnSplit split = ColumnSplit.create(outer, panel, share > 0);
             split.MRY(edgeFirst ? panel : inner); // the first (left) part
             split.IwV(edgeFirst ? inner : panel); // the second (right) part
-            split.cfM(edgeFirst ? dVx.cfM : dVx.MRY); // the column's side keeps its width
-            split.cfM(COLUMN_WIDTH);
+            split.cfM(split.mode(edgeFirst));     // the column's side keeps its width (or its share)
+            split.cfM(share > 0 ? share : COLUMN_WIDTH);
             if (innerFirst) container.MRY(split);
             else container.IwV(split);
             columns.add(split);
@@ -373,14 +375,16 @@ final class Stack {
     /**
      * Side columns: whenever a column other than the first is shown (its button, an action,
      * Bitwig's toggle, a controller), one still at the default width starts at the first column's
-     * width; one with a width of its own keeps it. Once per view settings.
+     * width; one with a width of its own keeps it, and one kept as a share keeps its share. Once
+     * per view settings.
      */
     void watch(gJi settings) {
         if (!side || settings == null || outer == null || !watched.add(settings)) return;
         for (Entry entry : entries) {
             ColumnSplit split = splitOf(entry);
+            if (split == null || split.share) continue; // the edge's own width, or a share: nothing to start
             AQw shown = entry.node().cfM(settings);
-            mcu width = split != null ? split.cfM(settings) : null; // its saved divider position: the column's width
+            mcu width = split.cfM(settings); // its saved divider position: the column's width
             if (shown == null || width == null) continue;
             shown.addListener((foz) event -> {
                 try {

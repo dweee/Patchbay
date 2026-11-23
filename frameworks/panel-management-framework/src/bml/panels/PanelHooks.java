@@ -171,8 +171,10 @@ public final class PanelHooks {
     }
 
     /**
-     * A splitter's widget builds its first part's widget: the main area beside side columns goes in
-     * a part that asks for no minimum width (MainPart), so the columns always have room to open.
+     * A splitter's widget builds its first part's widget: the main area beside side columns, or
+     * beside the browser side's own tab group, goes in a part that asks for no minimum width
+     * (MainPart), so the columns always have room to open and the browser side can be dragged as
+     * wide as the window.
      */
     @Hook(target = aCU.class, method = "MRY(LakZ;LaBW;)V", at = At.REPLACE_CALL, id = "main-beside-columns-first",
           callOwner = akw.class, call = "cfM(LaBW;Z)Ldve;", occurrence = 1)
@@ -189,9 +191,9 @@ public final class PanelHooks {
 
     private static dve besideColumns(akw part, dve built) {
         try {
-            if (built != null && Layouts.isMainCore(part)) return MainPart.create(built);
+            if (built != null && (Layouts.isMainCore(part) || Layouts.isBesideBrowserSide(part))) return MainPart.create(built);
         } catch (Throwable failure) {
-            Registry.LOG.log("could not let the main area beside side columns get narrower; it keeps its minimum width", failure);
+            Registry.LOG.log("could not let the main area beside side columns or the browser side get narrower; it keeps its minimum width", failure);
         }
         return built;
     }
