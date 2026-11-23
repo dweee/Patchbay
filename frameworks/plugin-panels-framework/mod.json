@@ -6,7 +6,7 @@
     "name": "Framework: Plug-in Panels",
     "version": "0.3.0-dev.2",
     "author": "shaboogen",
-    "description": "Shows a plug-in's parameters as a panel of Bitwig's own knobs, dropdowns and buttons, laid out by a panel file you choose.",
+    "description": "Shows a plug-in's parameters as a panel of Bitwig's own knobs, dropdowns and buttons, laid out by a panel file you choose",
     "area": "Framework",
     "documentation": "readme"
   },

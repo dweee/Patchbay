@@ -64,6 +64,7 @@ final class MapPackImporter {
             Path current=maps.resolve(id);
             try(Stream<Path> neighbors=Files.list(maps)){
                 for(Path other:neighbors.toList()){
+                    if(MapPackCatalog.strayEntry(other))continue;
                     if(!Files.isDirectory(other,LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(other))
                         throw new IOException("Invalid installed map: "+other);
                     if(!other.equals(current)){

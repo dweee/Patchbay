@@ -4,9 +4,9 @@
     "id": "browser-framework",
     "name": "Framework: Browser",
     "area": "Framework",
-    "version": "0.3.0-dev.1",
+    "version": "0.4.0-dev.1",
     "author": "shaboogen",
-    "description": "Lets mods change Bitwig's browsers: hide their parts, add file kinds, and offer browser views of their own. Settings > Mods has the choice of view once a mod offers one.",
+    "description": "Lets mods change Bitwig's browsers: hide their parts, add file kinds, and offer browser views of their own. Settings > Mods has the choice of view once a mod offers one",
     "documentation": "readme"
   },
   "built_against": {

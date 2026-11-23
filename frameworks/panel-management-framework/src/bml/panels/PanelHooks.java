@@ -7,6 +7,7 @@ import bitwig.obf.ajC; // a display profile, as most profile factories return it
 import bitwig.obf.akC; // a display profile: its windows and their layouts
 import bitwig.obf.akQ; // a panel
 import bitwig.obf.akZ; // a splitter between two parts of a window's layout
+import bitwig.obf.akw; // a part of a window's layout
 import bitwig.obf.dAd; // a toggle button widget
 import bitwig.obf.aln; // the "Dual Monitor Arranger / Mixer" profile
 import bitwig.obf.alo; // the "Dual Monitor Master / Detail" profile
@@ -147,13 +148,19 @@ public final class PanelHooks {
     }
 
     /**
-     * A splitter's widget is built: a stack's splitters and every side column's splitter (Bitwig's
-     * outer one too) leave no strip for a hidden view, so an open column sits flush against its
-     * neighbour and no handle can drag a hidden column open.
+     * A splitter's widget is built: side columns are first put beside their edge (Layouts.settleAt);
+     * a stack's splitters and every side column's splitter (Bitwig's outer one too, when its part
+     * at the edge is a column) leave no strip for a hidden view, so an open column sits flush
+     * against its neighbour and no handle can drag a hidden column open.
      */
     @Hook(target = akZ.class, method = "cfM(LaBW;Z)Ldve;", at = At.REPLACE_CALL, id = "view-splitter",
           callOwner = aCU.class, call = "cfM(LakZ;LaBW;)LaCU;", occurrence = 1)
     public static aCU splitter(akZ node, aBW window) {
+        try {
+            Layouts.settleAt(node); // side columns beside their edge, if a layout mod moved it since
+        } catch (Throwable failure) {
+            Registry.LOG.log("could not keep side columns beside their edge", failure);
+        }
         aCU widget = aCU.cfM(node, window); // Bitwig's own splitter widget
         try {
             if (node instanceof StackSplit || Layouts.isColumnSplitter(node)) widget.UNj(0); // the size of a hidden side's strip
@@ -161,6 +168,32 @@ public final class PanelHooks {
             Registry.LOG.log("could not remove a view splitter's strip", failure);
         }
         return widget;
+    }
+
+    /**
+     * A splitter's widget builds its first part's widget: the main area beside side columns goes in
+     * a part that asks for no minimum width (MainPart), so the columns always have room to open.
+     */
+    @Hook(target = aCU.class, method = "MRY(LakZ;LaBW;)V", at = At.REPLACE_CALL, id = "main-beside-columns-first",
+          callOwner = akw.class, call = "cfM(LaBW;Z)Ldve;", occurrence = 1)
+    public static dve mainFirst(akw part, aBW window, boolean flag) {
+        return besideColumns(part, part.cfM(window, flag));
+    }
+
+    /** As main-beside-columns-first, for the second part. */
+    @Hook(target = aCU.class, method = "MRY(LakZ;LaBW;)V", at = At.REPLACE_CALL, id = "main-beside-columns-second",
+          callOwner = akw.class, call = "cfM(LaBW;Z)Ldve;", occurrence = 2)
+    public static dve mainSecond(akw part, aBW window, boolean flag) {
+        return besideColumns(part, part.cfM(window, flag));
+    }
+
+    private static dve besideColumns(akw part, dve built) {
+        try {
+            if (built != null && Layouts.isMainCore(part)) return MainPart.create(built);
+        } catch (Throwable failure) {
+            Registry.LOG.log("could not let the main area beside side columns get narrower; it keeps its minimum width", failure);
+        }
+        return built;
     }
 
     /** A project's view settings have been read: the stack shows a view, and its dividers get usable positions. */

@@ -169,10 +169,6 @@ Bitwig's objects are returned as `Object`; a mod built with the BML mod kit cast
 
 A listener that throws is logged once and contained; the block is shown as it is.
 
-## Track block height
-
-When a mod adds a block to the Track Inspector, Bitwig's Track block keeps a minimum height (1256 layout units) with one track selected, so it doesn't shrink when other blocks share the Inspector. With several tracks selected (TRACKS (n)), or with every widget below its header hidden, it keeps Bitwig's own height. Without a mod's block in the Track Inspector, the framework leaves the Track block alone.
-
 ## Behaviour and failures
 
 - `declare` and `content` run on Bitwig's UI thread: keep them short. `content` runs each time Bitwig builds the panel.

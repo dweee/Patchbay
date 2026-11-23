@@ -218,6 +218,13 @@ final class Finish {
                 default -> errors.add(where + ": unknown At." + at);
             }
         }
+        if (v.containsKey("allReturns") && ((AnnotationValue.OfBoolean) v.get("allReturns")).booleanValue()) {
+            if (!at.equals("BEFORE_RETURN") && !at.equals("WRAP_RETURN"))
+                errors.add(where + ": allReturns applies to BEFORE_RETURN and WRAP_RETURN only");
+            else if (spec.startsWith("<init>") || spec.startsWith("<clinit>"))
+                errors.add(where + ": allReturns can't hook a constructor or static initializer");
+            else h.put("returns", "all");
+        }
         if (errors.size() > before) return;
         h.put("bridge", ordered("method", m.methodName().stringValue(), "descriptor", hookType.descriptorString(), "args", args));
         hooks.add(h);

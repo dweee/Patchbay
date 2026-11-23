@@ -7,6 +7,7 @@ import bitwig.obf.aBW; // a window's project view
 import bitwig.obf.ajF; // a tab group (several panels, one shown)
 import bitwig.obf.akC; // a display profile: its windows and their layouts
 import bitwig.obf.akQ; // a panel
+import bitwig.obf.akW; // the Browser panel
 import bitwig.obf.akZ; // a splitter between two parts of a window's layout
 import bitwig.obf.akj; // the mixer panel
 import bitwig.obf.akn; // a mode (ARRANGE, MIX, EDIT)
@@ -25,6 +26,10 @@ import bitwig.obf.ala; // a splitter between two parts of a layout
  * A view that replaces the mixer (View.replaces) is, in a mode whose main content is the mixer
  * (MIX), a choice with it instead (MainChoice: the mixer and the view take turns as the main
  * content), and not also a tab of that mode's lower panel.
+ *
+ * A view on the browser side (View.side) is instead one more tab of each window's browser side, or
+ * a column beside it (View.sideColumn, side columns: Stack.besideEdge); where a layout mod made the
+ * browser side's panels side columns, one more of those columns (placeSide).
  */
 final class Placement {
     private Placement() {
@@ -32,7 +37,7 @@ final class Placement {
 
     /** The profile's views placement; returns how many tabs were added. */
     static int place(akC profile) {
-        List<Registry.Declared> views = Registry.views();
+        List<Registry.Declared> views = Registry.mainViews(); // views on a side: placeSide
         if (profile == null || views.isEmpty()) return 0;
         int added = 0;
         int modesWithout = 0;
@@ -114,6 +119,110 @@ final class Placement {
         return null;
     }
 
+    /**
+     * The views on the browser side, in each window: one more tab of the browser side's tab group
+     * (after Bitwig's own tabs, as in a lower panel), or with View.sideColumn a side column beside
+     * the group, towards the main area. In a window whose browser side a layout mod made side
+     * columns (the Browser panel is a column), every browser-side view is one more of those columns,
+     * after theirs: a column view shown by default, a tab view hidden (as a tab not chosen). A
+     * window with neither doesn't show them (logged once per profile).
+     */
+    static void placeSide(Layouts layout, akC profile) {
+        List<Registry.Declared> views = Registry.sideViews("browser");
+        if (profile == null || views.isEmpty()) return;
+        int placed = 0, windowsWithout = 0;
+        for (int w = 0; w < profile.uWE(); w++) { // its windows
+            akw root = profile.cfM(w).TMF();
+            List<ajF> groups = new ArrayList<>();
+            browserSides(root, groups);
+            if (groups.isEmpty()) {
+                Stack columns = layout.browserColumns(root);
+                if (columns == null) {
+                    windowsWithout++;
+                    continue;
+                }
+                for (Registry.Declared view : views) {
+                    try {
+                        ViewNode node = new ViewNode();
+                        node.init(view, true, view.sideColumn);
+                        columns.addColumns(List.of(new Stack.Entry(view, node, null)));
+                        placed++;
+                    } catch (Throwable failure) {
+                        Registry.LOG.log("view " + view.who() + " could not be placed among the browser side's columns", failure);
+                    }
+                }
+                continue;
+            }
+            for (ajF group : groups) {
+                for (Registry.Declared view : views) {
+                    try {
+                        if (view.sideColumn && placeColumn(layout, group, view)) {
+                            placed++;
+                            continue;
+                        }
+                        ViewNode node = new ViewNode();
+                        node.init(view, false);
+                        group.cfM(node); // one more tab, after the group's own (ajL.cfM(akQ), as Bitwig adds its tabs)
+                        placed++;
+                    } catch (Throwable failure) {
+                        Registry.LOG.log("view " + view.who() + " could not be placed on the browser side " + group.tSS(), failure);
+                    }
+                }
+            }
+        }
+        if (placed == 0) {
+            Registry.LOG.log("display profile " + profile.MIO() + " has no browser side; its browser-side views aren't shown in it");
+        } else if (windowsWithout > 0) {
+            Registry.LOG.log("display profile " + profile.MIO() + ": " + windowsWithout
+                    + " window(s) have no browser side; its browser-side views aren't shown there");
+        }
+    }
+
+    /**
+     * A column view beside a browser side's tab group: one more of the side columns beside the group
+     * (made once per group, Stack.besideEdge). False, logged, when the group isn't in a left/right
+     * splitter: the view is then a tab.
+     */
+    private static boolean placeColumn(Layouts layout, ajF group, Registry.Declared view) {
+        if (!(group.uva() instanceof akZ outer) || !outer.lYc()) { // uva(): its parent part; lYc(): left/right
+            Registry.LOG.log("view " + view.who() + ": the browser side " + group.tSS() + " isn't beside the main area; a tab instead of a column");
+            return false;
+        }
+        Stack columns = layout.columnsBeside(outer, group);
+        ViewNode node = new ViewNode();
+        node.init(view, true, true); // its own "is shown", shown by default
+        columns.addColumns(List.of(new Stack.Entry(view, node, null)));
+        return true;
+    }
+
+    /**
+     * The browser sides of a window's layout: tab groups outside its main areas that hold the
+     * Browser panel (akW). Not inside a main area: those are the modes' own tab groups.
+     */
+    private static void browserSides(akw node, List<ajF> found) {
+        if (node == null || node instanceof akq) return; // a main area: the modes' layouts
+        if (node instanceof ajF group) {
+            for (Object tab : group.lYc()) { // its panels
+                if (tab instanceof akW) {
+                    found.add(group);
+                    return;
+                }
+            }
+            return;
+        }
+        if (node instanceof ala split) {
+            browserSides(split.E3(), found);
+            browserSides(split.wGc(), found);
+        }
+    }
+
+    /** Whether the part holds the node (itself or below it, through splitters). */
+    static boolean holds(akw part, Object node) {
+        if (part == null) return false;
+        if (part == node) return true;
+        return part instanceof ala split && (holds(split.E3(), node) || holds(split.wGc(), node));
+    }
+
     /** The main areas (mode switches) of a window's layout. */
     private static List<akq> mainAreas(akw root) {
         List<akq> found = new ArrayList<>();
@@ -144,11 +253,20 @@ final class Placement {
         }
     }
 
-    /** The node of a view in a window's current mode, or null if the view isn't there. */
+    /** The node of a view in a window's current mode (on its browser side for a side view), or null if the view isn't there. */
     static ViewNode nodeIn(aBW window, Registry.Declared view) {
         akC profile = window.puu();             // the window's display profile
         akn mode = window.RDJ().vpw();          // the current mode (from the window's view settings)
         akw root = profile.cfM(window.sc()).TMF(); // this window's layout
+        if (view.side != null) { // a tab of the window's browser side
+            List<ajF> groups = new ArrayList<>();
+            browserSides(root, groups);
+            for (ajF group : groups) {
+                ViewNode node = find(group, view);
+                if (node != null) return node;
+            }
+            return null;
+        }
         for (akq main : mainAreas(root)) {
             for (int c = 0; c < main.wGc(); c++) {
                 akz layout = main.cfM(c);

@@ -17,6 +17,32 @@ final class MapPackCatalog {
     private static final String SCHEMA_V1 = "bml-map-pack-v1";
     private static final String SCHEMA_V2 = "bml-map-pack-v2";
 
+    /** A name a file manager or the OS leaves behind: hidden (".DS_Store", "._x" AppleDouble files),
+     *  "Thumbs.db" or "desktop.ini". */
+    static boolean junkName(Path p) {
+        Path name = p.getFileName();
+        if (name == null) return false;
+        String n = name.toString();
+        return n.startsWith(".") || n.equalsIgnoreCase("Thumbs.db") || n.equalsIgnoreCase("desktop.ini");
+    }
+
+    /** An entry of maps/ that isn't a map pack and is passed over: a plain file, or a hidden folder.
+     *  A symbolic link, or anything else that isn't a plain file or folder, is never passed over. */
+    static boolean strayEntry(Path p) {
+        if (Files.isSymbolicLink(p)) return false;
+        return Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)
+            || (junkName(p) && Files.isDirectory(p, LinkOption.NOFOLLOW_LINKS));
+    }
+
+    /** For hashing maps/ into the prepare key: files that are no part of a pack (plain files directly in
+     *  maps/, anything under a hidden folder, and junk names anywhere). */
+    static boolean strayFile(Path maps, Path file) {
+        Path rel = maps.relativize(file);
+        if (rel.getNameCount() == 1) return true;
+        for (Path part : rel) if (junkName(part)) return true;
+        return false;
+    }
+
     static Selected select(Path packageRoot, String actualJarSha) throws IOException {
         Path maps = packageRoot.resolve("maps");
         if (!Files.exists(maps, LinkOption.NOFOLLOW_LINKS)) {
@@ -32,6 +58,7 @@ final class MapPackCatalog {
         int installed = 0;
         try (Stream<Path> dirs = Files.list(maps)) {
             for (Path dir : dirs.sorted().toList()) {
+                if (strayEntry(dir)) continue;
                 if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(dir))
                     throw new IOException("Invalid map package directory: " + dir);
                 Path metadata = dir.resolve("map.json");
@@ -93,6 +120,7 @@ final class MapPackCatalog {
                     throw new IOException("Map package missing essential payload hashes: "+dir);
                 try (Stream<Path> remapFiles=Files.list(remap)) {
                     for(Path file:remapFiles.toList()) {
+                        if(junkName(file) && Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(file))continue;
                         if(!hashes.containsKey("remap/"+file.getFileName()))
                             throw new IOException("Map remap file lacks checksum: "+file);
                     }

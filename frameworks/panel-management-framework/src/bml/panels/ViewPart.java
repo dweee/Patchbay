@@ -10,9 +10,10 @@ import com.bitwig.base.geom.tfK; // a widget size (width, height)
 /**
  * A view's collapsible part: Bitwig's own, built as Bitwig builds it, held (no slide animation),
  * and with a fixed minimum height while the view is shown. A side column (beside a left/right
- * split) asks for at least its content's minimum width, as Bitwig's own part does when shown, so a
- * panel is never narrower than it needs (the Project panel's tab row was cut off at a narrower
- * width).
+ * split) asks for no minimum width: its splitters may make it as narrow as the room allows, down
+ * to nothing, so a column always opens and never makes the window wider, and nothing is closed for
+ * want of room. Its content still gets at least its own minimum width (Bitwig's part lays it out
+ * so, as while it slides) and is clipped by the narrower part.
  *
  * Held, Bitwig's part asks for no minimum at all, so a divider could squeeze a shown view to
  * nothing, out of reach between two other dividers. Bitwig's own part asks for its animated
@@ -41,19 +42,14 @@ final class ViewPart extends dXx {
     }
 
     /**
-     * Its minimum size: none while hidden; while shown, a fixed height, or beside a left/right
-     * split a width of at least its content's minimum width (tJi(): the content's minimum, as
-     * Bitwig's own part reports it while shown).
+     * Its minimum size: none while hidden, or beside a left/right split (a side column); while
+     * shown in a stack, a fixed height.
      */
     @Override
     public tfK mL_() {
         if (!Hnt) return tfK.cfM(); // Hnt: shown
-        long min = eLY(MIN_HEIGHT_UNITS); // eLY: layout units to pixels
-        Jkg side = gfw();                 // its side of the splitter
-        if (side == Jkg.cfM || side == Jkg.MRY) {
-            tfK own = content != null ? content.tJi() : null;
-            return new tfK(own != null ? Math.max(min, own.FzB()) : min, 0); // FzB(): the width
-        }
-        return new tfK(0, min);
+        Jkg side = gfw();           // its side of the splitter
+        if (side == Jkg.cfM || side == Jkg.MRY) return tfK.cfM(); // a side column: no minimum width
+        return new tfK(0, eLY(MIN_HEIGHT_UNITS)); // eLY: layout units to pixels
     }
 }

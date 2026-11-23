@@ -9,9 +9,12 @@ import java.util.function.Consumer;
 
 import bml.browser.Feature;
 import bml.browser.ContentFactory;
+import bml.browser.DetailsFactory;
 import bml.browser.Features;
 import bml.browser.Panel;
 import bml.browser.ResultsFactory;
+import bml.browser.SearchRowFactory;
+import bml.browser.SetupFactory;
 import bml.browser.Scope;
 import bml.browser.View;
 import bml.browser.ViewContext;
@@ -35,6 +38,10 @@ final class Views {
         ContentFactory content;
         /** Where the view puts the side browser's results column, or null. */
         ResultsFactory results;
+        /** The view's setup for each side browser, its search-row slot and its details slot, or null. */
+        SetupFactory setup;
+        SearchRowFactory searchRow;
+        DetailsFactory details;
         boolean failed;
 
         Declared(String modId, String id, String name) {
@@ -85,6 +92,29 @@ final class Views {
         public View results(ResultsFactory factory) {
             results = factory;
             return this;
+        }
+
+        @Override
+        public View setup(SetupFactory factory) {
+            setup = factory;
+            return this;
+        }
+
+        @Override
+        public View searchRow(SearchRowFactory factory) {
+            searchRow = factory;
+            return this;
+        }
+
+        @Override
+        public View details(DetailsFactory factory) {
+            details = factory;
+            return this;
+        }
+
+        /** True when the view uses the side browser's build: its setup, a slot or its content. */
+        boolean usesBuild() {
+            return setup != null || results != null || searchRow != null || details != null || content != null;
         }
 
         @Override
@@ -158,9 +188,8 @@ final class Views {
     static void choose(int option) {
         Declared next = option <= 0 || option > ALL.size() ? null : ALL.get(option - 1);
         if (next == active) return;
-        boolean slotBefore = activeResults() != null;
+        boolean builtBefore = activeBuilt() != null;
         boolean buttonBefore = State.INSTANCE.get(Feature.ALL_SOURCES_BUTTON, Scope.SIDE);
-        boolean contentBefore = activeContent() != null;
         State.writeString(CHOICE, next == null ? "" : next.key());
         if (active != null) {
             Declared old = active;
@@ -176,10 +205,9 @@ final class Views {
         if (next != null) activate(next);
         State.LOG.log("view chosen: " + (active == null ? "Standard" : active.key()));
         State.INSTANCE.changed();
-        // a view's results slot and content, and the All Sources button, are built with the browser: a change of them rebuilds it
-        if (slotBefore || activeResults() != null
-                || State.INSTANCE.get(Feature.ALL_SOURCES_BUTTON, Scope.SIDE) != buttonBefore
-                || contentBefore || activeContent() != null) Rebuild.soon("Browser view");
+        // a view's setup, slots and content, and the All Sources button, are built with the browser: a change of them rebuilds it
+        if (builtBefore || activeBuilt() != null
+                || State.INSTANCE.get(Feature.ALL_SOURCES_BUTTON, Scope.SIDE) != buttonBefore) Rebuild.soon("Browser view");
     }
 
     @SuppressWarnings("deprecation")
@@ -223,13 +251,31 @@ final class Views {
         view.failed = true;
         State.LOG.log("view " + view.key() + ": " + reason + "; its claims lapse and standard behaviour applies");
         State.INSTANCE.changed();
-        if (view.content != null || view.results != null) Rebuild.soon("view " + view.key() + " failed"); // its content or slot is in the built browser
+        if (view.usesBuild()) Rebuild.soon("view " + view.key() + " failed"); // its setup, slots or content are in the built browser
     }
 
     /** The active, working view with a results slot, or null. */
     static Declared activeResults() {
         Declared view = active;
         return view == null || view.failed || view.results == null ? null : view;
+    }
+
+    /** The active, working view that uses the side browser's build (setup, slots or content), or null. */
+    static Declared activeBuilt() {
+        Declared view = active;
+        return view == null || view.failed || !view.usesBuild() ? null : view;
+    }
+
+    /** The active, working view with a search-row slot, or null. */
+    static Declared activeSearchRow() {
+        Declared view = active;
+        return view == null || view.failed || view.searchRow == null ? null : view;
+    }
+
+    /** The active, working view with a details slot, or null. */
+    static Declared activeDetails() {
+        Declared view = active;
+        return view == null || view.failed || view.details == null ? null : view;
     }
 
     /** The active, working view with content, or null. */

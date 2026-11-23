@@ -142,6 +142,7 @@ Start from a copy of the source `mod.json` and change it like this:
    - `"id"`: as in `hooks.json`;
    - `"target"`: the target ID of its `target`;
    - `"transform"`: as in `hooks.json`;
+   - only if it has `returns`: `"returns"`, as in `hooks.json` (it is always `"all"`);
    - only if it has `method_from`: `"method": {"from_target": "<target ID of method_from>"}` and `"body": {"template": "<its body>"}`;
    - only if it has `match`: `"match"` with `"opcode"`, `"target": "<target ID of match.target>"` and `"occurrence"`, and nothing else, even when `match` also lists `owner`/`name`/`descriptor`. Only when `match` has no `target` (a call to a JDK method), copy `owner`, `name`, `descriptor` as they are instead;
    - `"bridge"`: copied unchanged. (Its `args` name JVM local slots: in an instance method slot 0 is `this`, so `@Arg(0)` appears as `"arg1"`; in a static method `@Arg(0)` is `"arg0"`; a `long` or `double` parameter takes two slots. `WRAP_RETURN` appears as transform `WRAP_OBJECT_RETURN`, and `REPLACE_CALL` as `REPLACE_INVOKE`, both with `args: []`. All of that is correct.)

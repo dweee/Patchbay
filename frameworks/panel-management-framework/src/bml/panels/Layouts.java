@@ -9,6 +9,7 @@ import java.util.WeakHashMap;
 
 import bitwig.obf.akC; // a display profile: its windows and their layouts
 import bitwig.obf.akQ; // a panel
+import bitwig.obf.akW; // the Browser panel
 import bitwig.obf.akZ; // a splitter between two parts of a window's layout
 import bitwig.obf.akw; // a part of a window's layout
 import com.bitwig.flt.document_view_settings.gJi; // a project's view settings for one display profile
@@ -16,7 +17,7 @@ import com.bitwig.flt.document_view_settings.gJi; // a project's view settings f
 /**
  * The framework's record of one display profile: the Bitwig views the policies bound, its view
  * stack if a policy made one, and its side columns. Also runs the profile phases (layout, views,
- * arrange).
+ * arrange), then keeps every side column beside its edge (settle).
  */
 final class Layouts implements Layout {
     private static final Map<akC, Layouts> ALL = Collections.synchronizedMap(new IdentityHashMap<>());
@@ -67,6 +68,26 @@ final class Layouts implements Layout {
         return false;
     }
 
+    /** The side columns a splitter belongs to (as their outer splitter or a column's), in any profile, or null. */
+    static Stack sideOf(Object splitter) {
+        synchronized (ALL) {
+            for (Layouts l : ALL.values()) {
+                for (Stack s : l.sides) if (s.outer == splitter || s.columns.contains(splitter)) return s;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a part is the main area beside side columns (Stack.mainCore), in any profile. */
+    static boolean isMainCore(Object part) {
+        synchronized (ALL) {
+            for (Layouts l : ALL.values()) {
+                for (Stack s : l.sides) if (part != null && s.mainCore() == part) return true;
+            }
+        }
+        return false;
+    }
+
     /** The profile's stacks: the main one first, then the sides. */
     List<Stack> stacks() {
         List<Stack> all = new ArrayList<>();
@@ -105,6 +126,11 @@ final class Layouts implements Layout {
         }
         layout.caller = null;
         if (layout.stack == null) Placement.place(profile); // no stack: the mods' views as tabs
+        try {
+            Placement.placeSide(layout, profile); // the views on the browser side, with or without a stack
+        } catch (Throwable failure) {
+            Registry.LOG.log("could not place the browser-side views in display profile " + profile.MIO(), failure);
+        }
         for (Registry.Policy policy : Registry.policies()) {
             layout.caller = policy.modId();
             try {
@@ -114,6 +140,54 @@ final class Layouts implements Layout {
             }
         }
         layout.caller = null;
+        layout.settle();
+    }
+
+    /** Every side column beside its edge, wherever the arrange step moved the edge (Stack.settle). */
+    void settle() {
+        for (Stack s : sides) {
+            try {
+                s.settle();
+            } catch (Throwable failure) {
+                Registry.LOG.log("could not keep the side columns of " + s.name + " beside their edge", failure);
+            }
+        }
+    }
+
+    /**
+     * A splitter's widget is about to be built: if it holds side columns, they are put beside their
+     * edge first. A layout mod may move the edge again after the profile was built (Panel: Choose
+     * Sides applies a changed side at once, then rebuilds the windows), and Bitwig rebuilds the
+     * widgets from the layout, so this keeps the columns with it. Nothing changes when they are.
+     */
+    static void settleAt(Object splitter) {
+        List<Stack> found = new ArrayList<>();
+        synchronized (ALL) {
+            for (Layouts l : ALL.values()) {
+                for (Stack s : l.sides) if (s.outer == splitter || s.columns.contains(splitter)) found.add(s);
+            }
+        }
+        for (Stack s : found) s.settle();
+    }
+
+    /**
+     * The side columns in a window's layout that hold the Browser panel (a layout mod made the
+     * browser side's panels columns: Panel: Separate Browser Panels), or null.
+     */
+    Stack browserColumns(Object windowRoot) {
+        for (Stack s : sides) {
+            if (s.outer == null || !Placement.holds((akw) windowRoot, s.outer)) continue;
+            for (Stack.Entry e : s.entries) if (e.node() instanceof akW) return s;
+        }
+        return null;
+    }
+
+    /** The side columns beside a part of Bitwig's left/right splitter (the browser side's tab group), made on first use. */
+    Stack columnsBeside(akZ outer, akw edge) {
+        for (Stack s : sides) if (s.outer == outer && s.edge == edge) return s;
+        Stack s = Stack.besideEdge(this, outer, edge);
+        sides.add(s);
+        return s;
     }
 
     /** The policy of a mod, for the stack's callbacks. */
@@ -155,7 +229,7 @@ final class Layouts implements Layout {
             }
         }
         List<Stack.Entry> entries = boundEntries("stack", true, bitwigViewIds);
-        for (Registry.Declared view : Registry.views()) {
+        for (Registry.Declared view : Registry.mainViews()) { // views on a side: Placement.placeSide
             try {
                 ViewNode node = new ViewNode();
                 node.init(view, true);

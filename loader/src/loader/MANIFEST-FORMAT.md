@@ -262,6 +262,28 @@ Supported transforms:
 
 Normal hook `target` values reference a local `kind: method` target.
 
+### Final return or every return
+
+`INSERT_BEFORE_FINAL_RETURN` and `WRAP_OBJECT_RETURN` act on the target method's final return: the last instruction of its bytecode, which must be `RETURN` (for `INSERT_BEFORE_FINAL_RETURN`, a `void` method) or `ARETURN` (for `WRAP_OBJECT_RETURN`, a method that returns an object other than an array). Any other return instruction in the method (an early return from a branch, a `switch` case) is left as it is, so the method leaves there without the bridge. For example, a getter that returns a cached value early and builds a new one at the end is wrapped only when it builds.
+
+`"returns": "all"` on one of these two hooks runs the bridge at every return instead:
+
+```json
+{
+  "id": "button-label",
+  "target": "button_label",
+  "transform": "WRAP_OBJECT_RETURN",
+  "returns": "all",
+  "bridge": { "method": "label", "descriptor": "(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/String;", "args": ["this"] }
+}
+```
+
+- `"returns"` is `"final"` (the same as leaving it out) or `"all"`, and is valid only on `INSERT_BEFORE_FINAL_RETURN` and `WRAP_OBJECT_RETURN`.
+- With `"all"`, the method's body moves unchanged into a new private synthetic method of the same class and descriptor, `bml$returns$<name>` (with `$2`, `$3`, ... when that name is taken), and the method itself calls it with `this` and its parameters, then runs the bridge, then returns. Every return of the body, of whatever count, ends there. Stack traces through the method show both methods.
+- The bridge's `this` and `argN` are then the object and the parameters the method was called with, even when the body assigns a parameter before it returns. Each `argN` must be the slot of an object or array parameter; other locals of the body don't exist where the bridge runs, and preparation stops if one is named.
+- A constructor (`<init>`) or static initializer (`<clinit>`) can't take `"all"`.
+- On a class, `"all"` hooks are applied after its other hooks, so the others patch the body where they expect it. Several `"all"` hooks on one method each move the method as they find it: the first applied runs first.
+
 ### Composable `INSERT_AT_ENTRY`
 
 Multiple active `INSERT_AT_ENTRY` hooks may target the same physical Bitwig method.
@@ -371,6 +393,8 @@ arg2
 `argN` is a raw JVM local slot. BML's typed-local entry path derives the correct load opcode from the target descriptor and fails on incompatible bridge types.
 
 Do not assume all parameters are object references or occupy one JVM local slot.
+
+For a hook with `"returns": "all"`, `argN` must be a parameter's slot (see Final return or every return).
 
 ## Opens
 

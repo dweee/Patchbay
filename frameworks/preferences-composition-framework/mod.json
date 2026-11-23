@@ -6,7 +6,7 @@
     "area": "Framework",
     "version": "1.0.0",
     "author": "shaboogen",
-    "description": "Lets mods put their options in Bitwig's Settings, using Bitwig's own controls: in Bitwig's own sections, in new sections on any page, or on a page of their own.",
+    "description": "Lets mods put their options in Bitwig's Settings, using Bitwig's own controls: in Bitwig's own sections, in new sections on any page, or on a page of their own",
     "documentation": "readme"
   },
   "built_against": {
